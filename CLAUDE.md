@@ -21,6 +21,9 @@ pnpm build
 # Production
 pnpm start
 
+# Lint
+pnpm lint              # run ESLint
+
 # Tests
 pnpm test              # run all tests once
 pnpm test:watch        # run tests in watch mode

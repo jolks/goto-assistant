@@ -73,6 +73,12 @@ PORT=3001 npx goto-assistant
 
 3. Open `http://localhost:3000` — you'll be redirected to the setup page on first run to configure your AI provider and API key.
 
+4. Lint and test:
+   ```bash
+   pnpm lint
+   pnpm test
+   ```
+
 ## Configuration
 
 App configuration is stored in `data/config.json` (created on first setup). MCP server configuration is stored separately in `data/mcp.json`. Environment variables override file config:
@@ -101,13 +107,3 @@ cp .mcp.json.example .mcp.json
 ```
 
 Edit `.mcp.json` to set your preferred AI provider/model for the cron server. This file is gitignored since it contains personal preferences.
-
-## Development
-
-```bash
-pnpm dev          # run with tsx (hot TypeScript execution)
-pnpm build        # compile TypeScript to dist/
-pnpm start        # run compiled build
-pnpm test         # run tests
-pnpm test:watch   # run tests in watch mode
-```
