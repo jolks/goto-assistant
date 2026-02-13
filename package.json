@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "description": "Lightweight, self-hosted personal AI assistant",
   "license": "MIT",
+  "packageManager": "pnpm@10.29.3",
   "type": "module",
   "bin": {
     "goto-assistant": "./bin/goto-assistant.js"
