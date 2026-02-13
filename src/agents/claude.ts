@@ -1,6 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Config, McpServerConfig } from "../config.js";
 import { MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
+import type { Attachment } from "./router.js";
 
 export interface AgentResponse {
   sessionId: string | null;
@@ -11,7 +12,8 @@ export async function runClaude(
   prompt: string,
   config: Config,
   onChunk: (text: string) => void,
-  resumeSessionId?: string
+  resumeSessionId?: string,
+  attachments?: Attachment[]
 ): Promise<AgentResponse> {
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
@@ -50,9 +52,22 @@ export async function runClaude(
     options.resume = resumeSessionId;
   }
 
+  // When attachments are present, reference file paths in the prompt so Claude
+  // can read them via the filesystem MCP server's read_media_file tool.
+  // The query() function only accepts a plain string prompt.
+  let queryPrompt = prompt;
+  if (attachments && attachments.length > 0) {
+    const paths = attachments
+      .filter((att) => att.filePath)
+      .map((att) => att.filePath);
+    if (paths.length > 0) {
+      queryPrompt = `${prompt}\n\n[The user attached ${paths.length} image(s). Read them using the filesystem read_media_file tool to see the content:\n${paths.join("\n")}]`;
+    }
+  }
+
   let sessionId: string | null = null;
 
-  const result = query({ prompt, options });
+  const result = query({ prompt: queryPrompt, options });
 
   for await (const message of result) {
     if (message.type === "system" && message.subtype === "init") {

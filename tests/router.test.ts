@@ -28,7 +28,7 @@ describe("router", () => {
     const onChunk = vi.fn();
     const result = await routeMessage("hello", config, onChunk);
 
-    expect(runClaude).toHaveBeenCalledWith("hello", config, onChunk, undefined);
+    expect(runClaude).toHaveBeenCalledWith("hello", config, onChunk, undefined, undefined);
     expect(result.sessionId).toBe("claude-session-1");
   });
 
@@ -37,7 +37,7 @@ describe("router", () => {
     const onChunk = vi.fn();
     const result = await routeMessage("hello", config, onChunk);
 
-    expect(runOpenAI).toHaveBeenCalledWith("hello", config, onChunk);
+    expect(runOpenAI).toHaveBeenCalledWith("hello", config, onChunk, undefined, undefined);
     expect(result.sessionId).toBeNull();
   });
 

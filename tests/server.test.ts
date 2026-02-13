@@ -17,6 +17,7 @@ vi.mock("../src/agents/openai.js", () => ({
 import { createApp } from "../src/server.js";
 import { saveConfig, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
+import { UPLOADS_DIR } from "../src/uploads.js";
 
 const CONFIG_PATH = path.join(DATA_DIR, "config.json");
 const DB_PATH = path.join(DATA_DIR, "sessions.db");
@@ -42,6 +43,7 @@ describe("server", () => {
     for (const f of [DB_PATH, DB_PATH + "-wal", DB_PATH + "-shm"]) {
       if (fs.existsSync(f)) fs.unlinkSync(f);
     }
+    if (fs.existsSync(UPLOADS_DIR)) fs.rmSync(UPLOADS_DIR, { recursive: true });
   });
 
   it("GET /health returns 200", async () => {
@@ -138,6 +140,48 @@ describe("server", () => {
     expect(getConversation(conv.id)).toBeUndefined();
     expect(getMessages(conv.id)).toEqual([]);
   });
+
+  it("POST /api/upload accepts valid image and returns metadata", async () => {
+    saveConfig(testConfig);
+    const app = createApp();
+    const res = await makeUploadRequest(app, "test.png", "image/png", Buffer.from("fake-png"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.fileId).toBeTruthy();
+    expect(body.filename).toBe("test.png");
+    expect(body.mimeType).toBe("image/png");
+    expect(body.size).toBe(8);
+  });
+
+  it("POST /api/upload rejects unsupported MIME type", async () => {
+    saveConfig(testConfig);
+    const app = createApp();
+    const res = await makeUploadRequest(app, "doc.pdf", "application/pdf", Buffer.from("fake-pdf"));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("Unsupported file type");
+  });
+
+  it("GET /api/uploads/:fileId serves uploaded file", async () => {
+    saveConfig(testConfig);
+    const app = createApp();
+    const imageData = Buffer.from("fake-image-bytes");
+    const uploadRes = await makeUploadRequest(app, "photo.jpg", "image/jpeg", imageData);
+    const { fileId } = await uploadRes.json();
+
+    const res = await makeRequest(app, "GET", `/api/uploads/${fileId}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/jpeg");
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.equals(imageData)).toBe(true);
+  });
+
+  it("GET /api/uploads/:fileId returns 404 for unknown id", async () => {
+    saveConfig(testConfig);
+    const app = createApp();
+    const res = await makeRequest(app, "GET", "/api/uploads/nonexistent");
+    expect(res.status).toBe(404);
+  });
 });
 
 // Helper to make requests to Express app without starting a server
@@ -165,6 +209,36 @@ async function makeRequest(
           opts.body = JSON.stringify(body);
         }
         const res = await fetch(url, opts);
+        resolve(res);
+      } catch (e) {
+        reject(e);
+      } finally {
+        server.close();
+      }
+    });
+  });
+}
+
+// Helper to make multipart upload requests
+async function makeUploadRequest(
+  app: ReturnType<typeof createApp>,
+  filename: string,
+  mimeType: string,
+  data: Buffer
+): Promise<Response> {
+  const { createServer } = await import("node:http");
+  const server = createServer(app);
+
+  return new Promise((resolve, reject) => {
+    server.listen(0, async () => {
+      const addr = server.address() as { port: number };
+      try {
+        const form = new FormData();
+        form.append("file", new Blob([data], { type: mimeType }), filename);
+        const res = await fetch(`http://localhost:${addr.port}/api/upload`, {
+          method: "POST",
+          body: form,
+        });
         resolve(res);
       } catch (e) {
         reject(e);

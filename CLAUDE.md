@@ -35,9 +35,20 @@ npx vitest run tests/config.test.ts   # run a single test file
 - `src/agents/claude.ts` — uses `@anthropic-ai/claude-agent-sdk`, supports session resumption
 - `src/agents/openai.ts` — uses `@openai/agents`, manages MCP server lifecycle
 
+**Conversation history** (critical provider difference):
+- **Claude**: Uses SDK session resumption (`options.resume = sessionId`). The SDK maintains history server-side — we only pass the new message each turn.
+- **OpenAI**: Stateless — has no session resumption. We must load the full message history from SQLite and pass it as the input array on every turn. See `runOpenAI()` which builds `inputMessages` from `history` parameter. Assistant messages must use `content: [{ type: "output_text", text }]` format (not plain strings) or the SDK throws `item.content.map is not a function`.
+- When adding new per-message features (attachments, metadata, etc.), ensure both history paths are updated.
+
+**Image attachments** (critical provider difference):
+- **OpenAI**: Images are passed inline as base64 `input_image` content blocks in the message array. History messages with attachments get their image data re-read from `data/uploads/` via `getUpload()`.
+- **Claude**: The Agent SDK's `query()` only accepts a plain string prompt — passing structured content (e.g. AsyncIterable) crashes the subprocess. Instead, image file paths are appended to the prompt text, and Claude reads them via the filesystem MCP server's `read_media_file` tool. This means the filesystem MCP server must be configured for image upload to work with Claude.
+
 **Data flow**: Browser → WebSocket → `server.ts` → `router.ts` → provider agent → streamed response chunks back via WebSocket.
 
-**Persistence**: `src/sessions.ts` — SQLite (better-sqlite3, WAL mode) stores conversation metadata in `data/sessions.db`. The AI SDKs handle actual conversation history; the database tracks session IDs for resumption.
+**Persistence**: `src/sessions.ts` — SQLite (better-sqlite3, WAL mode) stores conversation metadata and messages in `data/sessions.db`. Claude uses `sdk_session_id` for resumption; OpenAI replays history from the messages table.
+
+**Uploads**: `src/uploads.ts` — images stored in `data/uploads/{uuid}/{filename}`. Message content with attachments is stored as JSON in the messages table (`parseMessageContent()` handles both plain text and JSON formats).
 
 **Configuration**: `src/config.ts` — stored in `data/config.json`. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) override file config. API keys are masked in API responses.
 

@@ -113,6 +113,23 @@ export function deleteConversation(id: string): void {
   getDb().prepare("DELETE FROM conversations WHERE id = ?").run(id);
 }
 
+export interface ParsedContent {
+  text: string;
+  attachments?: Array<{ fileId: string; filename: string; mimeType: string }>;
+}
+
+export function parseMessageContent(content: string): ParsedContent {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed.text === "string") {
+      return { text: parsed.text, attachments: parsed.attachments };
+    }
+  } catch {
+    // Not JSON — treat as plain text
+  }
+  return { text: content };
+}
+
 export function closeDb(): void {
   if (db) {
     db.close();

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>goto-assistant</title>
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -16,9 +16,11 @@
       </div>
       <div class="conversation-list" id="conversationList"></div>
     </div>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="chat-main">
       <div class="chat-header">
+        <button class="hamburger-btn" id="hamburgerBtn">&#9776;</button>
         <h2 id="chatTitle">New Conversation</h2>
         <button class="settings-btn" id="settingsBtn" title="Settings">&#9881;</button>
       </div>
@@ -26,7 +28,10 @@
       <div class="messages" id="messages"></div>
 
       <div class="input-area">
+        <div class="file-preview" id="filePreview"></div>
         <div class="input-row">
+          <button class="file-upload-btn" id="fileUploadBtn" title="Attach image">&#128206;</button>
+          <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
           <textarea id="input" rows="1" placeholder="Send a message..." autofocus></textarea>
           <button class="btn btn-primary" id="sendBtn">Send</button>
         </div>
@@ -38,6 +43,7 @@
     let ws = null;
     let currentConversationId = null;
     let currentAssistantEl = null;
+    let pendingFiles = []; // Files selected but not yet sent
 
     function connectWs() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -47,10 +53,12 @@
         if (msg.type === 'chunk') {
           if (!currentAssistantEl) {
             currentAssistantEl = addMessage('assistant', '');
-            currentAssistantEl.dataset.raw = '';
+            currentAssistantEl._raw = '';
           }
-          currentAssistantEl.dataset.raw += msg.text;
-          currentAssistantEl.innerHTML = marked.parse(currentAssistantEl.dataset.raw);
+          currentAssistantEl._raw += msg.text;
+          // Update only the text div (last child)
+          const textDiv = currentAssistantEl.lastElementChild;
+          if (textDiv) textDiv.innerHTML = marked.parse(currentAssistantEl._raw);
         } else if (msg.type === 'done') {
           currentConversationId = msg.conversationId;
           currentAssistantEl = null;
@@ -65,14 +73,43 @@
       ws.onclose = () => { setTimeout(connectWs, 2000); };
     }
 
-    function addMessage(role, text) {
+    function parseContent(content) {
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed && typeof parsed.text === 'string') return parsed;
+      } catch {}
+      return { text: content };
+    }
+
+    function addMessage(role, content, extraAttachments) {
       const el = document.createElement('div');
       el.className = 'message ' + role;
-      if (role === 'assistant' && text) {
-        el.innerHTML = marked.parse(text);
-      } else {
-        el.textContent = text;
+      const parsed = parseContent(content);
+      const attachments = extraAttachments || parsed.attachments;
+
+      // Render attachment images
+      if (attachments && attachments.length > 0) {
+        const strip = document.createElement('div');
+        strip.className = 'message-attachments';
+        for (const att of attachments) {
+          const img = document.createElement('img');
+          img.className = 'attachment-img';
+          img.src = `/api/uploads/${att.fileId}`;
+          img.alt = att.filename;
+          img.loading = 'lazy';
+          strip.appendChild(img);
+        }
+        el.appendChild(strip);
       }
+
+      const textContent = parsed.text;
+      const textEl = document.createElement('div');
+      if (role === 'assistant' && textContent) {
+        textEl.innerHTML = marked.parse(textContent);
+      } else if (textContent) {
+        textEl.textContent = textContent;
+      }
+      el.appendChild(textEl);
       document.getElementById('messages').appendChild(el);
       el.scrollIntoView({ behavior: 'smooth' });
       return el;
@@ -92,18 +129,38 @@
       if (el) el.remove();
     }
 
-    function sendMessage() {
+    async function sendMessage() {
       const input = document.getElementById('input');
       const text = input.value.trim();
-      if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+      if ((!text && pendingFiles.length === 0) || !ws || ws.readyState !== WebSocket.OPEN) return;
 
-      addMessage('user', text);
+      // Upload pending files
+      let attachments = [];
+      if (pendingFiles.length > 0) {
+        for (const file of pendingFiles) {
+          const form = new FormData();
+          form.append('file', file);
+          try {
+            const res = await fetch('/api/upload', { method: 'POST', body: form });
+            if (res.ok) {
+              const data = await res.json();
+              attachments.push({ fileId: data.fileId, filename: data.filename, mimeType: data.mimeType });
+            }
+          } catch {}
+        }
+        pendingFiles = [];
+        renderFilePreview();
+      }
+
+      addMessage('user', text || '(image)', attachments.length > 0 ? attachments : undefined);
       addTypingIndicator();
-      ws.send(JSON.stringify({
+      const payload = {
         type: 'message',
-        text,
+        text: text || 'Describe this image.',
         conversationId: currentConversationId,
-      }));
+      };
+      if (attachments.length > 0) payload.attachments = attachments;
+      ws.send(JSON.stringify(payload));
       input.value = '';
       input.style.height = 'auto';
     }
@@ -123,6 +180,42 @@
 
     document.getElementById('sendBtn').addEventListener('click', sendMessage);
 
+    // File upload handling
+    document.getElementById('fileUploadBtn').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      for (const file of e.target.files) {
+        pendingFiles.push(file);
+      }
+      e.target.value = '';
+      renderFilePreview();
+    });
+
+    function renderFilePreview() {
+      const preview = document.getElementById('filePreview');
+      preview.innerHTML = '';
+      if (pendingFiles.length === 0) { preview.style.display = 'none'; return; }
+      preview.style.display = 'flex';
+      pendingFiles.forEach((file, i) => {
+        const item = document.createElement('div');
+        item.className = 'file-preview-item';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.onload = () => URL.revokeObjectURL(img.src);
+        item.appendChild(img);
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'file-preview-remove';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => {
+          pendingFiles.splice(i, 1);
+          renderFilePreview();
+        });
+        item.appendChild(removeBtn);
+        preview.appendChild(item);
+      });
+    }
+
     // New chat
     document.getElementById('newChatBtn').addEventListener('click', () => {
       currentConversationId = null;
@@ -130,6 +223,7 @@
       document.getElementById('messages').innerHTML = '';
       document.getElementById('chatTitle').textContent = 'New Conversation';
       document.querySelectorAll('.conversation-item').forEach(el => el.classList.remove('active'));
+      closeSidebar();
     });
 
     // Settings
@@ -178,6 +272,7 @@
             currentConversationId = c.id;
             document.getElementById('messages').innerHTML = '';
             document.getElementById('chatTitle').textContent = displayTitle;
+            closeSidebar();
             document.querySelectorAll('.conversation-item').forEach(e => e.classList.remove('active'));
             el.classList.add('active');
             try {
@@ -190,6 +285,33 @@
         });
       } catch {}
     }
+
+    // Sidebar toggle (mobile)
+    function toggleSidebar() {
+      document.querySelector('.sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+    function closeSidebar() {
+      document.querySelector('.sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+    document.getElementById('hamburgerBtn').addEventListener('click', toggleSidebar);
+    document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
+
+    // Swipe gesture: right from left edge opens sidebar, left closes
+    let touchStartX = 0;
+    let touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+      if (dy > Math.abs(dx)) return; // vertical swipe
+      if (dx > 80 && touchStartX < 30) toggleSidebar();
+      else if (dx < -80 && document.querySelector('.sidebar').classList.contains('open')) closeSidebar();
+    }, { passive: true });
 
     connectWs();
     loadConversations();

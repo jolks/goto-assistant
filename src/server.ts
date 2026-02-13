@@ -2,9 +2,11 @@ import express, { type Express } from "express";
 import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
+import multer from "multer";
 import { isConfigured, loadConfig, saveConfig, getMaskedConfig, type Config } from "./config.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
-import { routeMessage } from "./agents/router.js";
+import { routeMessage, type Attachment } from "./agents/router.js";
+import { saveUpload, getUpload, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
 
 export function createApp(): Express {
   const app = express();
@@ -114,6 +116,34 @@ export function createApp(): Express {
     res.json({ ok: true });
   });
 
+  // File upload
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+  app.post("/api/upload", upload.single("file"), (req, res) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
+    }
+    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+      res.status(400).json({ error: `Unsupported file type: ${file.mimetype}. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` });
+      return;
+    }
+    const meta = saveUpload(file.buffer, file.originalname, file.mimetype);
+    res.json({ fileId: meta.fileId, filename: meta.filename, mimeType: meta.mimeType, size: meta.size });
+  });
+
+  // Serve uploaded files
+  app.get("/api/uploads/:fileId", (req, res) => {
+    const result = getUpload(req.params.fileId);
+    if (!result) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+    res.setHeader("Content-Type", result.mimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${result.filename}"`);
+    res.send(result.data);
+  });
+
   return app;
 }
 
@@ -123,7 +153,12 @@ export function createServer(app: Express) {
 
   wss.on("connection", (ws: WebSocket) => {
     ws.on("message", async (raw: Buffer) => {
-      let msg: { type: string; text: string; conversationId?: string };
+      let msg: {
+        type: string;
+        text: string;
+        conversationId?: string;
+        attachments?: Array<{ fileId: string; filename: string; mimeType: string }>;
+      };
       try {
         msg = JSON.parse(raw.toString());
       } catch {
@@ -162,14 +197,43 @@ export function createServer(app: Express) {
       }
 
       try {
-        // Save user message
-        saveMessage(conversationId, "user", msg.text);
+        // Save user message (with attachment metadata if present)
+        const msgAttachments = msg.attachments;
+        if (msgAttachments && msgAttachments.length > 0) {
+          saveMessage(conversationId, "user", JSON.stringify({
+            text: msg.text,
+            attachments: msgAttachments.map(a => ({ fileId: a.fileId, filename: a.filename, mimeType: a.mimeType })),
+          }));
+        } else {
+          saveMessage(conversationId, "user", msg.text);
+        }
 
         // Set title from first message on new conversations
         if (isNewConversation) {
           const title = msg.text.length > 100 ? msg.text.slice(0, 100) + "..." : msg.text;
           updateTitle(conversationId, title);
         }
+
+        // Resolve attachment data from disk
+        let attachments: Attachment[] | undefined;
+        if (msgAttachments && msgAttachments.length > 0) {
+          attachments = [];
+          for (const att of msgAttachments) {
+            const upload = getUpload(att.fileId);
+            if (upload) {
+              attachments.push({
+                filename: upload.filename,
+                mimeType: upload.mimeType,
+                data: upload.data,
+                filePath: path.resolve(UPLOADS_DIR, att.fileId, upload.filename),
+              });
+            }
+          }
+        }
+
+        // Load conversation history (excluding current message) for providers that need it
+        const allMessages = getMessages(conversationId);
+        const history = allMessages.slice(0, -1); // exclude the message we just saved
 
         let responseText = "";
         const result = await routeMessage(
@@ -181,7 +245,9 @@ export function createServer(app: Express) {
               ws.send(JSON.stringify({ type: "chunk", text: chunk }));
             }
           },
-          resumeSessionId
+          resumeSessionId,
+          attachments,
+          history
         );
 
         // Save assistant message

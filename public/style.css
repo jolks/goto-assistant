@@ -128,3 +128,73 @@ body {
 .input-row textarea:focus { outline: none; border-color: #4a9eff; }
 
 .typing-indicator { font-style: italic; color: #888; padding: 8px 16px; }
+
+/* File upload */
+.file-upload-btn {
+  background: none; border: 1px solid #ddd; border-radius: 10px; cursor: pointer;
+  font-size: 18px; padding: 8px 10px; flex-shrink: 0; line-height: 1;
+}
+.file-upload-btn:hover { background: #f0f0f0; border-color: #ccc; }
+
+.file-preview {
+  display: none; gap: 8px; padding: 8px 0; max-width: 720px; margin: 0 auto;
+  overflow-x: auto; flex-wrap: nowrap;
+}
+.file-preview-item {
+  position: relative; width: 64px; height: 64px; flex-shrink: 0; border-radius: 8px;
+  overflow: hidden; border: 1px solid #ddd;
+}
+.file-preview-item img { width: 100%; height: 100%; object-fit: cover; }
+.file-preview-remove {
+  position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); color: #fff;
+  border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 12px;
+  cursor: pointer; line-height: 1; padding: 0;
+}
+
+.message-attachments { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.attachment-img { max-width: 300px; max-height: 300px; border-radius: 8px; cursor: pointer; }
+
+/* Hamburger button — hidden on desktop */
+.hamburger-btn {
+  display: none; background: none; border: none; cursor: pointer;
+  font-size: 22px; padding: 4px 8px; border-radius: 6px; flex-shrink: 0;
+}
+.hamburger-btn:hover { background: #f0f0f0; }
+
+/* Sidebar overlay — hidden by default */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9;
+}
+.sidebar-overlay.open { display: block; }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .hamburger-btn { display: block; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 280px;
+    transform: translateX(-100%); transition: transform 0.25s ease;
+    z-index: 10;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .chat-main { width: 100%; }
+
+  .chat-header h2 {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
+  }
+
+  .messages { padding: 12px; }
+  .message { max-width: 100%; }
+  .message.user { max-width: 85%; }
+
+  .input-area { padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .input-row { max-width: 100%; }
+  .input-row textarea { font-size: 16px; }
+
+  .conversation-item .delete-btn { display: inline-block; }
+
+  /* Setup page mobile */
+  .setup-container { margin: 16px; padding: 20px; }
+  .radio-group { flex-direction: column; gap: 8px; }
+}
