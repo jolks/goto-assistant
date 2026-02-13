@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, type Config } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, type Config, type McpServerConfig } from "./config.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
 import { saveUpload, getUpload, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
@@ -79,12 +79,16 @@ export function createApp(): Express {
 
   // Save config from setup page
   app.post("/api/setup", (req, res) => {
-    const config = req.body as Config;
+    const { mcpServers, ...rest } = req.body;
+    const config = rest as Config;
     if (!config.provider || !config.server?.port) {
       res.status(400).json({ error: "Invalid config" });
       return;
     }
     saveConfig(config);
+    if (mcpServers) {
+      saveMcpServers(mcpServers);
+    }
     res.json({ ok: true });
   });
 
@@ -96,6 +100,22 @@ export function createApp(): Express {
     }
     const config = loadConfig();
     res.json({ configured: true, config: getMaskedConfig(config) });
+  });
+
+  // MCP servers endpoints
+  app.get("/api/mcp-servers", (_req, res) => {
+    const servers = loadMcpServers();
+    res.json({ mcpServers: getMaskedMcpServers(servers) });
+  });
+
+  app.post("/api/mcp-servers", (req, res) => {
+    const { mcpServers } = req.body;
+    if (!mcpServers || typeof mcpServers !== "object") {
+      res.status(400).json({ error: "Invalid mcpServers" });
+      return;
+    }
+    saveMcpServers(mcpServers as Record<string, McpServerConfig>);
+    res.json({ ok: true });
   });
 
   // List conversations
@@ -177,6 +197,7 @@ export function createServer(app: Express) {
       }
 
       const config = loadConfig();
+      const mcpServers = loadMcpServers();
 
       // Get or create conversation
       let conversationId = msg.conversationId;
@@ -239,6 +260,7 @@ export function createServer(app: Express) {
         const result = await routeMessage(
           msg.text,
           config,
+          mcpServers,
           (chunk) => {
             responseText += chunk;
             if (ws.readyState === WebSocket.OPEN) {

@@ -238,16 +238,22 @@
           baseUrl: provider === 'openai' ? baseUrl : '',
         },
         server: { port },
-        mcpServers,
       };
 
       try {
-        const res = await fetch('/api/setup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config),
-        });
-        if (!res.ok) { showStatus('Failed to save config', 'error'); return; }
+        const [configRes, mcpRes] = await Promise.all([
+          fetch('/api/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+          }),
+          fetch('/api/mcp-servers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mcpServers }),
+          }),
+        ]);
+        if (!configRes.ok || !mcpRes.ok) { showStatus('Failed to save config', 'error'); return; }
         window.location.href = '/';
       } catch (e) {
         showStatus('Failed to save config', 'error');
@@ -263,16 +269,22 @@
     // Pre-fill if editing existing config
     (async () => {
       try {
-        const res = await fetch('/api/config');
-        const data = await res.json();
+        const [configRes, mcpRes] = await Promise.all([
+          fetch('/api/config'),
+          fetch('/api/mcp-servers'),
+        ]);
+        const data = await configRes.json();
+        const mcpData = await mcpRes.json();
         if (data.configured && data.config) {
           const c = data.config;
           document.querySelector(`input[name="provider"][value="${c.provider}"]`).checked = true;
           document.getElementById('port').value = c.server.port;
           // Don't pre-fill masked API key
           if (c[c.provider].baseUrl) document.getElementById('baseUrl').value = c[c.provider].baseUrl;
-          // Load MCP servers from config
-          servers = Object.entries(c.mcpServers).map(([name, s]) => ({
+        }
+        // Load MCP servers from dedicated endpoint
+        if (mcpData.mcpServers && Object.keys(mcpData.mcpServers).length > 0) {
+          servers = Object.entries(mcpData.mcpServers).map(([name, s]) => ({
             name, command: s.command, args: s.args.join(' '), env: s.env || {},
           }));
           renderServers(servers);

@@ -9,6 +9,9 @@ goto-assistant is a self-hosted personal AI assistant with a web-based chat inte
 ## Commands
 
 ```bash
+# Quick start (end users)
+npx goto-assistant
+
 # Development (runs TypeScript directly via tsx)
 pnpm dev
 
@@ -22,13 +25,17 @@ pnpm start
 pnpm test              # run all tests once
 pnpm test:watch        # run tests in watch mode
 npx vitest run tests/config.test.ts   # run a single test file
+
+# Packaging
+npm pack --dry-run     # verify tarball contents
+npm publish            # publish to npm
 ```
 
 ## Architecture
 
 **Backend** (`src/`): Express 5 server with WebSocket streaming. No bundler — TypeScript compiles via `tsc`, frontend is vanilla HTML/CSS/JS served statically from `public/`.
 
-**Entry point**: `src/index.ts` — starts Express app, redirects to setup page on first run.
+**Entry point**: `src/index.ts` — starts Express app, redirects to setup page on first run. `bin/goto-assistant.js` is the npx entry point — sets `GOTO_DATA_DIR` to `~/.goto-assistant` before importing `dist/index.js`.
 
 **Provider abstraction**:
 - `src/agents/router.ts` — dispatches to Claude or OpenAI based on config
@@ -50,7 +57,7 @@ npx vitest run tests/config.test.ts   # run a single test file
 
 **Uploads**: `src/uploads.ts` — images stored in `data/uploads/{uuid}/{filename}`. Message content with attachments is stored as JSON in the messages table (`parseMessageContent()` handles both plain text and JSON formats).
 
-**Configuration**: `src/config.ts` — stored in `data/config.json`. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) override file config. API keys are masked in API responses.
+**Configuration**: `src/config.ts` — app config stored in `data/config.json`, MCP server config stored separately in `data/mcp.json`. `mcp.json` is the single source of truth for MCP servers — edited directly by users, read by mcp-cron and the app. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) override file config. API keys are masked in API responses. `PORT` env var overrides configured port. `GOTO_DATA_DIR` env var overrides the data directory (default `./data` for dev, `~/.goto-assistant` via npx).
 
 **Frontend** (`public/`): Vanilla JS, no framework. `index.html` is the chat UI, `setup.html` is the first-run config wizard. `cron-sync.js` syncs MCP cron server config with provider settings.
 
@@ -60,4 +67,4 @@ npx vitest run tests/config.test.ts   # run a single test file
 - Strict TypeScript enabled
 - Tests use Vitest with `vi.mock()` to avoid real API calls
 - `data/` directory is gitignored — holds runtime state (config, SQLite DB)
-- MCP servers are configured per-provider and passed environment variables for API keys
+- MCP servers live in `data/mcp.json` (not `config.json`) and are passed as a separate parameter to agent functions

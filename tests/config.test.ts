@@ -6,7 +6,7 @@ vi.hoisted(() => {
 
 import fs from "node:fs";
 import path from "node:path";
-import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
+import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 
 const CONFIG_PATH = path.join(DATA_DIR, "config.json");
 
@@ -15,9 +15,6 @@ const testConfig: Config = {
   claude: { apiKey: "sk-ant-test123456", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
   openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "" },
   server: { port: 3000 },
-  mcpServers: {
-    memory: { command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"] },
-  },
 };
 
 describe("config", () => {
@@ -54,6 +51,11 @@ describe("config", () => {
     expect(fs.existsSync(CONFIG_PATH)).toBe(true);
   });
 
+  it("saveConfig does not write mcp.json", () => {
+    saveConfig(testConfig);
+    expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(false);
+  });
+
   it("loadConfig reads saved config", () => {
     saveConfig(testConfig);
     const loaded = loadConfig();
@@ -81,29 +83,30 @@ describe("config", () => {
     expect(masked.openai.apiKey).toContain("****");
   });
 
-  it("getMaskedConfig masks env vars containing 'key'", () => {
-    const configWithEnv: Config = {
-      ...testConfig,
-      mcpServers: {
-        cron: {
-          command: "npx",
-          args: ["-y", "mcp-cron"],
-          env: { ANTHROPIC_API_KEY: "sk-secret-value", SOME_PATH: "/usr/bin" },
-        },
-      },
+  it("saveMcpServers writes mcp.json and loadMcpServers reads it", () => {
+    const servers: Record<string, McpServerConfig> = {
+      memory: { command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"] },
     };
-    const masked = getMaskedConfig(configWithEnv);
-    expect(masked.mcpServers.cron.env!.ANTHROPIC_API_KEY).toContain("****");
-    expect(masked.mcpServers.cron.env!.SOME_PATH).toBe("/usr/bin");
+    saveMcpServers(servers);
+    expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(true);
+    const loaded = loadMcpServers();
+    expect(loaded).toEqual(servers);
   });
 
-  it("saveConfig writes mcp.json with only mcpServers", () => {
-    saveConfig(testConfig);
-    expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(true);
-    const mcpConfig = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, "utf-8"));
-    expect(mcpConfig).toEqual({ mcpServers: testConfig.mcpServers });
-    expect(mcpConfig).not.toHaveProperty("provider");
-    expect(mcpConfig).not.toHaveProperty("claude");
-    expect(mcpConfig).not.toHaveProperty("openai");
+  it("loadMcpServers returns empty object when file does not exist", () => {
+    expect(loadMcpServers()).toEqual({});
+  });
+
+  it("getMaskedMcpServers masks env vars containing 'key'", () => {
+    const servers: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-secret-value", SOME_PATH: "/usr/bin" },
+      },
+    };
+    const masked = getMaskedMcpServers(servers);
+    expect(masked.cron.env!.ANTHROPIC_API_KEY).toContain("****");
+    expect(masked.cron.env!.SOME_PATH).toBe("/usr/bin");
   });
 });

@@ -44,12 +44,13 @@ const config: Config = {
   claude: { apiKey: "", model: "", baseUrl: "" },
   openai: { apiKey: "sk-test", model: "gpt-4o", baseUrl: "" },
   server: { port: 3000 },
-  mcpServers: {},
 };
+
+const mcpServers = {};
 
 describe("openai input construction", () => {
   it("passes plain string when no history and no attachments", async () => {
-    await runOpenAI("hello", config, vi.fn());
+    await runOpenAI("hello", config, mcpServers, vi.fn());
     expect(capturedInput).toBe("hello");
   });
 
@@ -58,7 +59,7 @@ describe("openai input construction", () => {
       { role: "user", content: "previous question" },
       { role: "assistant", content: "previous answer" },
     ];
-    await runOpenAI("follow up", config, vi.fn(), undefined, history);
+    await runOpenAI("follow up", config, mcpServers, vi.fn(), undefined, history);
 
     expect(Array.isArray(capturedInput)).toBe(true);
     const messages = capturedInput as Array<Record<string, unknown>>;
@@ -74,7 +75,7 @@ describe("openai input construction", () => {
       mimeType: "image/png",
       data: Buffer.from("fake-image"),
     }];
-    await runOpenAI("describe this", config, vi.fn(), attachments);
+    await runOpenAI("describe this", config, mcpServers, vi.fn(), attachments);
 
     expect(Array.isArray(capturedInput)).toBe(true);
     const messages = capturedInput as Array<Record<string, unknown>>;
@@ -98,7 +99,7 @@ describe("openai input construction", () => {
       mimeType: "image/jpeg",
       data: Buffer.from("jpeg-data"),
     }];
-    await runOpenAI("what is this?", config, vi.fn(), attachments, history);
+    await runOpenAI("what is this?", config, mcpServers, vi.fn(), attachments, history);
 
     const messages = capturedInput as Array<Record<string, unknown>>;
     expect(messages).toHaveLength(3);
@@ -115,7 +116,7 @@ describe("openai input construction", () => {
       { role: "user", content: JSON.stringify({ text: "look at this", attachments: [{ fileId: "abc", filename: "img.png", mimeType: "image/png" }] }) },
       { role: "assistant", content: "I see an image" },
     ];
-    await runOpenAI("and this?", config, vi.fn(), undefined, history);
+    await runOpenAI("and this?", config, mcpServers, vi.fn(), undefined, history);
 
     const messages = capturedInput as Array<Record<string, unknown>>;
     // User message should have image + text content blocks

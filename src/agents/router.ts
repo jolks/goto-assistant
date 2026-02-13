@@ -1,4 +1,4 @@
-import type { Config } from "../config.js";
+import type { Config, McpServerConfig } from "../config.js";
 import { runClaude } from "./claude.js";
 import { runOpenAI } from "./openai.js";
 
@@ -21,6 +21,7 @@ export interface RouteResult {
 export async function routeMessage(
   prompt: string,
   config: Config,
+  mcpServers: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
   resumeSessionId?: string,
   attachments?: Attachment[],
@@ -28,11 +29,11 @@ export async function routeMessage(
 ): Promise<RouteResult> {
   switch (config.provider) {
     case "claude": {
-      const result = await runClaude(prompt, config, onChunk, resumeSessionId, attachments);
+      const result = await runClaude(prompt, config, mcpServers, onChunk, resumeSessionId, attachments);
       return { sessionId: result.sessionId };
     }
     case "openai": {
-      await runOpenAI(prompt, config, onChunk, attachments, history);
+      await runOpenAI(prompt, config, mcpServers, onChunk, attachments, history);
       return { sessionId: null };
     }
     default:

@@ -12,7 +12,6 @@ export interface Config {
   claude: { apiKey: string; model: string; baseUrl: string };
   openai: { apiKey: string; model: string; baseUrl: string };
   server: { port: number };
-  mcpServers: Record<string, McpServerConfig>;
 }
 
 export const DATA_DIR = path.join(process.cwd(), process.env.GOTO_DATA_DIR || "data");
@@ -45,10 +44,20 @@ export function saveConfig(config: Config): void {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-  fs.writeFileSync(
-    MCP_CONFIG_PATH,
-    JSON.stringify({ mcpServers: config.mcpServers }, null, 2)
-  );
+}
+
+export function loadMcpServers(): Record<string, McpServerConfig> {
+  if (!fs.existsSync(MCP_CONFIG_PATH)) return {};
+  const raw = fs.readFileSync(MCP_CONFIG_PATH, "utf-8");
+  const parsed = JSON.parse(raw);
+  return parsed.mcpServers ?? {};
+}
+
+export function saveMcpServers(servers: Record<string, McpServerConfig>): void {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify({ mcpServers: servers }, null, 2));
 }
 
 export function maskApiKey(key: string): string {
@@ -61,22 +70,27 @@ export function getMaskedConfig(config: Config): Config {
     ...config,
     claude: { ...config.claude, apiKey: maskApiKey(config.claude.apiKey) },
     openai: { ...config.openai, apiKey: maskApiKey(config.openai.apiKey) },
-    mcpServers: Object.fromEntries(
-      Object.entries(config.mcpServers).map(([name, server]) => [
-        name,
-        {
-          ...server,
-          env: server.env
-            ? Object.fromEntries(
-                Object.entries(server.env).map(([k, v]) =>
-                  k.toLowerCase().includes("key") || k.toLowerCase().includes("secret")
-                    ? [k, maskApiKey(v)]
-                    : [k, v]
-                )
-              )
-            : undefined,
-        },
-      ])
-    ),
   };
+}
+
+export function getMaskedMcpServers(
+  servers: Record<string, McpServerConfig>
+): Record<string, McpServerConfig> {
+  return Object.fromEntries(
+    Object.entries(servers).map(([name, server]) => [
+      name,
+      {
+        ...server,
+        env: server.env
+          ? Object.fromEntries(
+              Object.entries(server.env).map(([k, v]) =>
+                k.toLowerCase().includes("key") || k.toLowerCase().includes("secret")
+                  ? [k, maskApiKey(v)]
+                  : [k, v]
+              )
+            )
+          : undefined,
+      },
+    ])
+  );
 }

@@ -11,6 +11,7 @@ export interface AgentResponse {
 export async function runClaude(
   prompt: string,
   config: Config,
+  mcpServersConfig: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
   resumeSessionId?: string,
   attachments?: Attachment[]
@@ -25,7 +26,7 @@ export async function runClaude(
 
   // Build MCP servers config with their env vars
   const mcpServers: Record<string, McpServerConfig> = {};
-  for (const [name, server] of Object.entries(config.mcpServers)) {
+  for (const [name, server] of Object.entries(mcpServersConfig)) {
     const serverEnv: Record<string, string> = { ...env, ...server.env };
     if (name === MEMORY_SERVER_NAME) {
       serverEnv.MEMORY_FILE_PATH = MEMORY_FILE_PATH;
@@ -42,7 +43,7 @@ export async function runClaude(
     mcpServers,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    allowedTools: Object.keys(config.mcpServers).map((name) => `mcp__${name}__*`),
+    allowedTools: Object.keys(mcpServersConfig).map((name) => `mcp__${name}__*`),
     systemPrompt: "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
     env,
     maxTurns: 30,

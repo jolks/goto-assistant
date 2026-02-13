@@ -2,6 +2,27 @@
 
 A self-hosted personal AI assistant with a web-based chat interface. Supports both Claude (Anthropic) and OpenAI as providers, with MCP server integration for extended capabilities.
 
+## Quick Start
+
+```bash
+npx goto-assistant
+```
+
+Open http://localhost:3000 — first run redirects to setup page for API key config.
+
+### Requirements
+- Node.js 20.11 or later
+- Anthropic or OpenAI API key
+
+### Data Storage
+All data (config, conversations, uploads) stored in `~/.goto-assistant/`.
+Custom location: `GOTO_DATA_DIR=/path/to/data npx goto-assistant`
+
+### Custom Port
+```bash
+PORT=3001 npx goto-assistant
+```
+
 ## Architecture
 
 ```
@@ -38,7 +59,7 @@ A self-hosted personal AI assistant with a web-based chat interface. Supports bo
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Setup
+## Development Setup
 
 1. Install dependencies:
    ```bash
@@ -54,14 +75,14 @@ A self-hosted personal AI assistant with a web-based chat interface. Supports bo
 
 ## Configuration
 
-Configuration is stored in `data/config.json` (created on first setup). Environment variables override file config:
+App configuration is stored in `data/config.json` (created on first setup). MCP server configuration is stored separately in `data/mcp.json`. Environment variables override file config:
 
 - `ANTHROPIC_API_KEY` — API key for Claude
 - `OPENAI_API_KEY` — API key for OpenAI
 
 ## MCP Servers
 
-The assistant supports MCP servers for extended capabilities. Configure them through the setup page or by editing the `mcpServers` section in `data/config.json`.
+The assistant supports MCP servers for extended capabilities. Configure them through the setup page or by editing `data/mcp.json` directly.
 
 ### Claude Code MCP servers
 

@@ -15,7 +15,7 @@ vi.mock("../src/agents/openai.js", () => ({
 }));
 
 import { createApp } from "../src/server.js";
-import { saveConfig, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
+import { saveConfig, saveMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
 import { UPLOADS_DIR } from "../src/uploads.js";
 
@@ -27,7 +27,6 @@ const testConfig: Config = {
   claude: { apiKey: "sk-ant-test123456", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
   openai: { apiKey: "sk-test789", model: "gpt-4o", baseUrl: "" },
   server: { port: 3000 },
-  mcpServers: {},
 };
 
 describe("server", () => {
@@ -80,6 +79,16 @@ describe("server", () => {
     expect(fs.existsSync(CONFIG_PATH)).toBe(true);
   });
 
+  it("POST /api/setup saves mcpServers to mcp.json when included", async () => {
+    const app = createApp();
+    const payload = { ...testConfig, mcpServers: { memory: { command: "npx", args: ["-y", "server-memory"] } } };
+    const res = await makeRequest(app, "POST", "/api/setup", true, payload);
+    expect(res.status).toBe(200);
+    expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(true);
+    const mcpConfig = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, "utf-8"));
+    expect(mcpConfig.mcpServers.memory.command).toBe("npx");
+  });
+
   it("GET /api/config returns masked config when configured", async () => {
     saveConfig(testConfig);
     const app = createApp();
@@ -89,6 +98,42 @@ describe("server", () => {
     expect(body.configured).toBe(true);
     expect(body.config.claude.apiKey).toContain("****");
     expect(body.config.claude.apiKey).not.toBe(testConfig.claude.apiKey);
+  });
+
+  it("GET /api/config does not include mcpServers", async () => {
+    saveConfig(testConfig);
+    const app = createApp();
+    const res = await makeRequest(app, "GET", "/api/config");
+    const body = await res.json();
+    expect(body.config).not.toHaveProperty("mcpServers");
+  });
+
+  it("GET /api/mcp-servers returns saved MCP servers", async () => {
+    const servers = { memory: { command: "npx", args: ["-y", "server-memory"] } };
+    saveMcpServers(servers);
+    const app = createApp();
+    const res = await makeRequest(app, "GET", "/api/mcp-servers");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.mcpServers.memory.command).toBe("npx");
+  });
+
+  it("GET /api/mcp-servers returns empty when no mcp.json", async () => {
+    const app = createApp();
+    const res = await makeRequest(app, "GET", "/api/mcp-servers");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.mcpServers).toEqual({});
+  });
+
+  it("POST /api/mcp-servers saves MCP servers", async () => {
+    const app = createApp();
+    const servers = { fs: { command: "npx", args: ["-y", "server-fs"] } };
+    const res = await makeRequest(app, "POST", "/api/mcp-servers", true, { mcpServers: servers });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(true);
   });
 
   it("GET /api/config returns configured:false when not configured", async () => {

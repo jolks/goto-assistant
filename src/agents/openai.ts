@@ -1,5 +1,5 @@
 import { Agent, run, MCPServerStdio } from "@openai/agents";
-import type { Config } from "../config.js";
+import type { Config, McpServerConfig } from "../config.js";
 import { MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
@@ -8,6 +8,7 @@ import { getUpload } from "../uploads.js";
 export async function runOpenAI(
   prompt: string,
   config: Config,
+  mcpServersConfig: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
   attachments?: Attachment[],
   history?: HistoryMessage[]
@@ -22,7 +23,7 @@ export async function runOpenAI(
 
   // Set up MCP stdio servers
   const mcpServers: MCPServerStdio[] = [];
-  for (const [name, server] of Object.entries(config.mcpServers)) {
+  for (const [name, server] of Object.entries(mcpServersConfig)) {
     const serverEnv: Record<string, string> = { ...env, ...server.env };
     if (name === MEMORY_SERVER_NAME) {
       serverEnv.MEMORY_FILE_PATH = MEMORY_FILE_PATH;

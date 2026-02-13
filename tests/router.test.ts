@@ -19,30 +19,31 @@ const baseConfig: Config = {
   claude: { apiKey: "sk-ant-test", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
   openai: { apiKey: "sk-test", model: "gpt-4o", baseUrl: "" },
   server: { port: 3000 },
-  mcpServers: {},
 };
+
+const mcpServers = {};
 
 describe("router", () => {
   it("routes to Claude when provider is claude", async () => {
     const config = { ...baseConfig, provider: "claude" as const };
     const onChunk = vi.fn();
-    const result = await routeMessage("hello", config, onChunk);
+    const result = await routeMessage("hello", config, mcpServers, onChunk);
 
-    expect(runClaude).toHaveBeenCalledWith("hello", config, onChunk, undefined, undefined);
+    expect(runClaude).toHaveBeenCalledWith("hello", config, mcpServers, onChunk, undefined, undefined);
     expect(result.sessionId).toBe("claude-session-1");
   });
 
   it("routes to OpenAI when provider is openai", async () => {
     const config = { ...baseConfig, provider: "openai" as const };
     const onChunk = vi.fn();
-    const result = await routeMessage("hello", config, onChunk);
+    const result = await routeMessage("hello", config, mcpServers, onChunk);
 
-    expect(runOpenAI).toHaveBeenCalledWith("hello", config, onChunk, undefined, undefined);
+    expect(runOpenAI).toHaveBeenCalledWith("hello", config, mcpServers, onChunk, undefined, undefined);
     expect(result.sessionId).toBeNull();
   });
 
   it("throws on unknown provider", async () => {
     const config = { ...baseConfig, provider: "unknown" as "claude" };
-    await expect(routeMessage("hello", config, vi.fn())).rejects.toThrow("Unknown provider");
+    await expect(routeMessage("hello", config, mcpServers, vi.fn())).rejects.toThrow("Unknown provider");
   });
 });
