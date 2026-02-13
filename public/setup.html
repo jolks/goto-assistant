@@ -9,6 +9,7 @@
 </head>
 <body>
   <div class="setup-container">
+    <a href="/" id="backBtn" style="display:none;text-decoration:none;color:#555;font-size:14px">&larr; Home</a>
     <h1>goto-assistant Setup</h1>
 
     <div class="form-group">
@@ -48,7 +49,7 @@
       <input type="number" id="port" value="3000">
     </div>
 
-    <button class="btn btn-primary" id="saveBtn">Save & Start</button>
+    <button class="btn btn-primary" id="saveBtn">Save</button>
     <div id="status"></div>
   </div>
 
@@ -100,6 +101,7 @@
     }
 
     let servers = [...defaultServers.map(s => ({ ...s, env: { ...s.env } }))];
+    let isEditing = false; // true when revisiting setup with existing config
     renderServers(servers);
 
     function readServers() {
@@ -208,8 +210,8 @@
       const model = document.getElementById('model').value;
       const port = parseInt(document.getElementById('port').value) || 3000;
 
-      if (!apiKey) { showStatus('API key is required', 'error'); return; }
-      if (!model) { showStatus('Select a model first', 'error'); return; }
+      if (!apiKey && !isEditing) { showStatus('API key is required', 'error'); return; }
+      if (!model && !isEditing) { showStatus('Select a model first', 'error'); return; }
 
       // Sync cron one final time before saving
       syncCronConfig();
@@ -225,18 +227,15 @@
         };
       });
 
+      const providerConfig = {
+        ...(apiKey ? { apiKey } : {}),
+        ...(model ? { model } : {}),
+        baseUrl,
+      };
       const config = {
         provider,
-        claude: {
-          apiKey: provider === 'claude' ? apiKey : '',
-          model: provider === 'claude' ? model : '',
-          baseUrl: provider === 'claude' ? baseUrl : '',
-        },
-        openai: {
-          apiKey: provider === 'openai' ? apiKey : '',
-          model: provider === 'openai' ? model : '',
-          baseUrl: provider === 'openai' ? baseUrl : '',
-        },
+        claude: provider === 'claude' ? providerConfig : {},
+        openai: provider === 'openai' ? providerConfig : {},
         server: { port },
       };
 
@@ -276,11 +275,19 @@
         const data = await configRes.json();
         const mcpData = await mcpRes.json();
         if (data.configured && data.config) {
+          isEditing = true;
+          document.getElementById('backBtn').style.display = '';
+          document.getElementById('apiKey').placeholder = 'Leave empty to keep existing key';
           const c = data.config;
           document.querySelector(`input[name="provider"][value="${c.provider}"]`).checked = true;
           document.getElementById('port').value = c.server.port;
           // Don't pre-fill masked API key
-          if (c[c.provider].baseUrl) document.getElementById('baseUrl').value = c[c.provider].baseUrl;
+          if (c[c.provider]?.baseUrl) document.getElementById('baseUrl').value = c[c.provider].baseUrl;
+          // Pre-fill model as a single option so user sees current selection
+          if (c[c.provider]?.model) {
+            const select = document.getElementById('model');
+            select.innerHTML = `<option value="${c[c.provider].model}">${c[c.provider].model}</option>`;
+          }
         }
         // Load MCP servers from dedicated endpoint
         if (mcpData.mcpServers && Object.keys(mcpData.mcpServers).length > 0) {

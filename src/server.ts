@@ -80,11 +80,19 @@ export function createApp(): Express {
   // Save config from setup page
   app.post("/api/setup", (req, res) => {
     const { mcpServers, ...rest } = req.body;
-    const config = rest as Config;
-    if (!config.provider || !config.server?.port) {
+    const incoming = rest as Partial<Config>;
+    if (!incoming.provider || !incoming.server?.port) {
       res.status(400).json({ error: "Invalid config" });
       return;
     }
+    // Merge with existing config to preserve fields not sent (e.g. API key when editing)
+    const existing = isConfigured() ? loadConfig() : { provider: "", claude: { apiKey: "", model: "", baseUrl: "" }, openai: { apiKey: "", model: "", baseUrl: "" }, server: { port: 3000 } };
+    const config: Config = {
+      provider: incoming.provider,
+      claude: { ...existing.claude, ...incoming.claude },
+      openai: { ...existing.openai, ...incoming.openai },
+      server: incoming.server,
+    };
     saveConfig(config);
     if (mcpServers) {
       saveMcpServers(mcpServers);

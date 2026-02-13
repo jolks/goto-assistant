@@ -136,6 +136,50 @@ describe("server", () => {
     expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(true);
   });
 
+  it("POST /api/setup preserves existing API key and model when omitted", async () => {
+    // Temporarily clear env var so loadConfig() uses the file value as-is
+    const savedEnvKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      saveConfig(testConfig);
+      const app = createApp();
+
+      // Second save omits apiKey and model (simulates editing MCP servers only)
+      const partialConfig = {
+        provider: "claude",
+        claude: { baseUrl: "" },
+        openai: {},
+        server: { port: 3000 },
+      };
+      const res = await makeRequest(app, "POST", "/api/setup", true, partialConfig);
+      expect(res.status).toBe(200);
+
+      const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+      expect(saved.claude.apiKey).toBe(testConfig.claude.apiKey);
+      expect(saved.claude.model).toBe(testConfig.claude.model);
+    } finally {
+      process.env.ANTHROPIC_API_KEY = savedEnvKey;
+    }
+  });
+
+  it("POST /api/setup overwrites API key when provided", async () => {
+    saveConfig(testConfig);
+    const app = createApp();
+
+    const updated = {
+      provider: "claude",
+      claude: { apiKey: "sk-ant-new-key-12345", model: "claude-opus-4-20250918", baseUrl: "" },
+      openai: {},
+      server: { port: 3000 },
+    };
+    const res = await makeRequest(app, "POST", "/api/setup", true, updated);
+    expect(res.status).toBe(200);
+
+    const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    expect(saved.claude.apiKey).toBe("sk-ant-new-key-12345");
+    expect(saved.claude.model).toBe("claude-opus-4-20250918");
+  });
+
   it("GET /api/config returns configured:false when not configured", async () => {
     if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
     const app = createApp();
