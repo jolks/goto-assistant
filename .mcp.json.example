@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "cron": {
+      "command": "npx",
+      "args": ["-y", "mcp-cron", "--transport", "stdio", "--prevent-sleep",
+               "--ai-provider", "anthropic", "--ai-model", "claude-sonnet-4-5-20250929"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    }
+  }
+}

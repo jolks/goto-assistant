@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>goto-assistant</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="chat-layout">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>Conversations</h2>
+        <button class="btn-icon" id="newChatBtn" title="New chat">+</button>
+      </div>
+      <div class="conversation-list" id="conversationList"></div>
+    </div>
+
+    <div class="chat-main">
+      <div class="chat-header">
+        <h2 id="chatTitle">New Conversation</h2>
+        <button class="settings-btn" id="settingsBtn" title="Settings">&#9881;</button>
+      </div>
+
+      <div class="messages" id="messages"></div>
+
+      <div class="input-area">
+        <div class="input-row">
+          <textarea id="input" rows="1" placeholder="Send a message..." autofocus></textarea>
+          <button class="btn btn-primary" id="sendBtn">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let currentConversationId = null;
+    let currentAssistantEl = null;
+
+    function connectWs() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'chunk') {
+          if (!currentAssistantEl) {
+            currentAssistantEl = addMessage('assistant', '');
+            currentAssistantEl.dataset.raw = '';
+          }
+          currentAssistantEl.dataset.raw += msg.text;
+          currentAssistantEl.innerHTML = marked.parse(currentAssistantEl.dataset.raw);
+        } else if (msg.type === 'done') {
+          currentConversationId = msg.conversationId;
+          currentAssistantEl = null;
+          removeTypingIndicator();
+          loadConversations();
+        } else if (msg.type === 'error') {
+          removeTypingIndicator();
+          currentAssistantEl = null;
+          addMessage('assistant', 'Error: ' + msg.text);
+        }
+      };
+      ws.onclose = () => { setTimeout(connectWs, 2000); };
+    }
+
+    function addMessage(role, text) {
+      const el = document.createElement('div');
+      el.className = 'message ' + role;
+      if (role === 'assistant' && text) {
+        el.innerHTML = marked.parse(text);
+      } else {
+        el.textContent = text;
+      }
+      document.getElementById('messages').appendChild(el);
+      el.scrollIntoView({ behavior: 'smooth' });
+      return el;
+    }
+
+    function addTypingIndicator() {
+      const el = document.createElement('div');
+      el.className = 'typing-indicator';
+      el.id = 'typing';
+      el.textContent = 'Thinking...';
+      document.getElementById('messages').appendChild(el);
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function removeTypingIndicator() {
+      const el = document.getElementById('typing');
+      if (el) el.remove();
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('input');
+      const text = input.value.trim();
+      if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+      addMessage('user', text);
+      addTypingIndicator();
+      ws.send(JSON.stringify({
+        type: 'message',
+        text,
+        conversationId: currentConversationId,
+      }));
+      input.value = '';
+      input.style.height = 'auto';
+    }
+
+    // Auto-resize textarea
+    const input = document.getElementById('input');
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+    // New chat
+    document.getElementById('newChatBtn').addEventListener('click', () => {
+      currentConversationId = null;
+      currentAssistantEl = null;
+      document.getElementById('messages').innerHTML = '';
+      document.getElementById('chatTitle').textContent = 'New Conversation';
+      document.querySelectorAll('.conversation-item').forEach(el => el.classList.remove('active'));
+    });
+
+    // Settings
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      window.location.href = '/setup.html';
+    });
+
+    // Load conversations
+    async function loadConversations() {
+      try {
+        const res = await fetch('/api/conversations');
+        const data = await res.json();
+        const list = document.getElementById('conversationList');
+        list.innerHTML = '';
+        data.conversations.forEach(c => {
+          const el = document.createElement('div');
+          el.className = 'conversation-item' + (c.id === currentConversationId ? ' active' : '');
+          const date = new Date(c.created_at).toLocaleDateString();
+          const displayTitle = c.title || `${c.provider} — ${date}`;
+          el.title = displayTitle;
+
+          const titleSpan = document.createElement('span');
+          titleSpan.className = 'conv-title';
+          titleSpan.textContent = displayTitle;
+          el.appendChild(titleSpan);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn-icon delete-btn';
+          deleteBtn.textContent = '×';
+          deleteBtn.title = 'Delete conversation';
+          deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm('Delete this conversation?')) return;
+            await fetch(`/api/conversations/${c.id}`, { method: 'DELETE' });
+            if (currentConversationId === c.id) {
+              currentConversationId = null;
+              currentAssistantEl = null;
+              document.getElementById('messages').innerHTML = '';
+              document.getElementById('chatTitle').textContent = 'New Conversation';
+            }
+            loadConversations();
+          });
+          el.appendChild(deleteBtn);
+
+          titleSpan.addEventListener('click', async () => {
+            currentConversationId = c.id;
+            document.getElementById('messages').innerHTML = '';
+            document.getElementById('chatTitle').textContent = displayTitle;
+            document.querySelectorAll('.conversation-item').forEach(e => e.classList.remove('active'));
+            el.classList.add('active');
+            try {
+              const msgRes = await fetch(`/api/conversations/${c.id}/messages`);
+              const msgData = await msgRes.json();
+              msgData.messages.forEach(m => addMessage(m.role, m.content));
+            } catch {}
+          });
+          list.appendChild(el);
+        });
+      } catch {}
+    }
+
+    connectWs();
+    loadConversations();
+  </script>
+</body>
+</html>

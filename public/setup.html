@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>goto-assistant — Setup</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/cron-sync.js"></script>
+</head>
+<body>
+  <div class="setup-container">
+    <h1>goto-assistant Setup</h1>
+
+    <div class="form-group">
+      <label>Provider</label>
+      <div class="radio-group">
+        <label><input type="radio" name="provider" value="claude" checked> Claude</label>
+        <label><input type="radio" name="provider" value="openai"> OpenAI</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="apiKey">API Key</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-... or sk-...">
+    </div>
+
+    <div class="form-group">
+      <label for="baseUrl">Base URL <span style="font-weight:400;color:#888">(optional — for LiteLLM proxy)</span></label>
+      <input type="text" id="baseUrl" placeholder="Leave empty for direct API">
+    </div>
+
+    <div class="form-group">
+      <label for="model">Model</label>
+      <div class="btn-row">
+        <select id="model"><option value="">— Select provider first —</option></select>
+        <button class="btn btn-secondary" id="loadModelsBtn">Load Models</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>MCP Servers</label>
+      <div id="mcpServers" class="mcp-servers"></div>
+      <button class="btn btn-secondary" id="addServerBtn">+ Add Server</button>
+    </div>
+
+    <div class="form-group">
+      <label for="port">Server Port</label>
+      <input type="number" id="port" value="3000">
+    </div>
+
+    <button class="btn btn-primary" id="saveBtn">Save & Start</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const defaultServers = [
+      { name: 'cron', command: 'npx', args: '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929', env: {} },
+      { name: 'memory', command: 'npx', args: '-y @modelcontextprotocol/server-memory', env: {} },
+      { name: 'filesystem', command: 'npx', args: '-y @modelcontextprotocol/server-filesystem .', env: {} },
+    ];
+
+    function getProvider() {
+      return document.querySelector('input[name="provider"]:checked').value;
+    }
+
+    // Render MCP servers
+    function renderServers(servers) {
+      const container = document.getElementById('mcpServers');
+      container.innerHTML = '';
+      servers.forEach((s, i) => {
+        const div = document.createElement('div');
+        div.className = 'mcp-server';
+        const envRows = Object.entries(s.env || {}).map(([k, v], ei) =>
+          `<div class="env-row">
+            <input type="text" placeholder="Key" value="${k}" data-server="${i}" data-env-key="${ei}">
+            <input type="text" placeholder="Value" value="${v}" data-server="${i}" data-env-val="${ei}">
+            <button class="btn-icon" onclick="removeEnv(${i},${ei})">×</button>
+          </div>`
+        ).join('');
+        div.innerHTML = `
+          <div class="mcp-server-header">
+            <input type="text" value="${s.name}" data-server="${i}" data-field="name" placeholder="Server name">
+            <button class="btn-icon" onclick="removeServer(${i})">×</button>
+          </div>
+          <div class="form-group">
+            <label>Command</label>
+            <input type="text" value="${s.command}" data-server="${i}" data-field="command">
+          </div>
+          <div class="form-group">
+            <label>Args</label>
+            <input type="text" value="${s.args}" data-server="${i}" data-field="args">
+          </div>
+          <div class="form-group">
+            <label>Environment Variables</label>
+            ${envRows}
+            <button class="btn btn-secondary" style="margin-top:4px;font-size:12px;padding:4px 10px" onclick="addEnv(${i})">+ Add Env</button>
+          </div>`;
+        container.appendChild(div);
+      });
+    }
+
+    let servers = [...defaultServers.map(s => ({ ...s, env: { ...s.env } }))];
+    renderServers(servers);
+
+    function readServers() {
+      const container = document.getElementById('mcpServers');
+      const items = container.querySelectorAll('.mcp-server');
+      return Array.from(items).map((item, i) => {
+        const name = item.querySelector('[data-field="name"]').value;
+        const command = item.querySelector('[data-field="command"]').value;
+        const args = item.querySelector('[data-field="args"]').value;
+        const envRows = item.querySelectorAll('.env-row');
+        const env = {};
+        envRows.forEach(row => {
+          const k = row.querySelector('[placeholder="Key"]').value.trim();
+          const v = row.querySelector('[placeholder="Value"]').value.trim();
+          if (k) env[k] = v;
+        });
+        return { name, command, args, env };
+      });
+    }
+
+    window.removeServer = (i) => { servers.splice(i, 1); renderServers(servers); };
+    window.addEnv = (i) => {
+      servers = readServers();
+      servers[i].env[''] = '';
+      renderServers(servers);
+    };
+    window.removeEnv = (si, ei) => {
+      servers = readServers();
+      const keys = Object.keys(servers[si].env);
+      delete servers[si].env[keys[ei]];
+      renderServers(servers);
+    };
+
+    document.getElementById('addServerBtn').addEventListener('click', () => {
+      servers = readServers();
+      servers.push({ name: '', command: 'npx', args: '', env: {} });
+      renderServers(servers);
+    });
+
+    // Sync cron server config with current provider/key/model/baseUrl selections
+    function syncCronConfig() {
+      servers = readServers();
+      const cron = servers.find(s => s.name === 'cron');
+      if (!cron) return;
+
+      const provider = getProvider();
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const model = document.getElementById('model').value;
+      const baseUrl = document.getElementById('baseUrl').value.trim();
+
+      const result = buildCronConfig({
+        provider, apiKey, model, baseUrl,
+        currentArgs: cron.args,
+      });
+
+      cron.args = result.args;
+
+      // Update env: remove old API_KEY entries, set the correct one
+      const oldKeys = Object.keys(cron.env).filter(k => k.includes('API_KEY'));
+      oldKeys.forEach(k => delete cron.env[k]);
+      cron.env[result.envKey] = result.envValue;
+
+      renderServers(servers);
+    }
+
+    // Sync cron when provider, API key, base URL, or model changes
+    document.querySelectorAll('input[name="provider"]').forEach(radio => {
+      radio.addEventListener('change', syncCronConfig);
+    });
+    document.getElementById('apiKey').addEventListener('input', syncCronConfig);
+    document.getElementById('baseUrl').addEventListener('input', syncCronConfig);
+    document.getElementById('model').addEventListener('change', syncCronConfig);
+
+    // Load models
+    document.getElementById('loadModelsBtn').addEventListener('click', async () => {
+      const provider = getProvider();
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const baseUrl = document.getElementById('baseUrl').value.trim();
+      if (!apiKey) { showStatus('Enter an API key first', 'error'); return; }
+
+      const select = document.getElementById('model');
+      select.innerHTML = '<option value="">Loading...</option>';
+
+      try {
+        const res = await fetch('/api/models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, apiKey, baseUrl: baseUrl || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showStatus(data.error, 'error'); return; }
+        select.innerHTML = data.models.map(m =>
+          `<option value="${m.id}">${m.name}</option>`
+        ).join('');
+        showStatus('Models loaded', 'success');
+      } catch (e) {
+        showStatus('Failed to load models', 'error');
+      }
+    });
+
+    // Save
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const provider = getProvider();
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const baseUrl = document.getElementById('baseUrl').value.trim();
+      const model = document.getElementById('model').value;
+      const port = parseInt(document.getElementById('port').value) || 3000;
+
+      if (!apiKey) { showStatus('API key is required', 'error'); return; }
+      if (!model) { showStatus('Select a model first', 'error'); return; }
+
+      // Sync cron one final time before saving
+      syncCronConfig();
+      servers = readServers();
+
+      const mcpServers = {};
+      servers.forEach(s => {
+        if (!s.name) return;
+        mcpServers[s.name] = {
+          command: s.command,
+          args: s.args.split(/\s+/).filter(Boolean),
+          ...(Object.keys(s.env).length > 0 ? { env: s.env } : {}),
+        };
+      });
+
+      const config = {
+        provider,
+        claude: {
+          apiKey: provider === 'claude' ? apiKey : '',
+          model: provider === 'claude' ? model : '',
+          baseUrl: provider === 'claude' ? baseUrl : '',
+        },
+        openai: {
+          apiKey: provider === 'openai' ? apiKey : '',
+          model: provider === 'openai' ? model : '',
+          baseUrl: provider === 'openai' ? baseUrl : '',
+        },
+        server: { port },
+        mcpServers,
+      };
+
+      try {
+        const res = await fetch('/api/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        if (!res.ok) { showStatus('Failed to save config', 'error'); return; }
+        window.location.href = '/';
+      } catch (e) {
+        showStatus('Failed to save config', 'error');
+      }
+    });
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.className = 'status-msg ' + type;
+      el.textContent = msg;
+    }
+
+    // Pre-fill if editing existing config
+    (async () => {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        if (data.configured && data.config) {
+          const c = data.config;
+          document.querySelector(`input[name="provider"][value="${c.provider}"]`).checked = true;
+          document.getElementById('port').value = c.server.port;
+          // Don't pre-fill masked API key
+          if (c[c.provider].baseUrl) document.getElementById('baseUrl').value = c[c.provider].baseUrl;
+          // Load MCP servers from config
+          servers = Object.entries(c.mcpServers).map(([name, s]) => ({
+            name, command: s.command, args: s.args.join(' '), env: s.env || {},
+          }));
+          renderServers(servers);
+        }
+      } catch {}
+    })();
+  </script>
+</body>
+</html>

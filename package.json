@@ -1,0 +1,33 @@
+{
+  "name": "goto-assistant",
+  "version": "0.1.0",
+  "description": "Lightweight, self-hosted personal AI assistant",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.0",
+    "@openai/agents": "^0.4.0",
+    "@openai/agents-extensions": "^0.4.0",
+    "better-sqlite3": "^11.0.0",
+    "express": "^5.0.0",
+    "ws": "^8.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.0.0",
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  }
+}
