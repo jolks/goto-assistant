@@ -86,8 +86,8 @@ The assistant comes pre-configured with these MCP servers:
 
 | Server | Package | Capabilities |
 |--------|---------|-------------|
-| **memory** | `@modelcontextprotocol/server-memory` | Persistent knowledge graph across conversations |
-| **filesystem** | `@modelcontextprotocol/server-filesystem` | Read, write, and manage local files |
+| **memory** | [`@modelcontextprotocol/server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) | Persistent knowledge graph across conversations |
+| **filesystem** | [`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) | Read, write, and manage local files |
 | **cron** | [`mcp-cron`](https://github.com/jolks/mcp-cron) | Schedule shell commands and AI prompts with access to MCP servers |
 
 Add your own through the setup page or by editing `data/mcp.json` directly. Any MCP server that supports stdio transport will work — browse the [MCP server directory](https://github.com/modelcontextprotocol/servers) for more.
