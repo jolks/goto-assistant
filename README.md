@@ -1,6 +1,6 @@
 # goto-assistant
 
-A self-hosted personal AI assistant with a web-based chat interface. Supports both Claude (Anthropic) and OpenAI as providers, with MCP server integration for extended capabilities.
+Lightweight, self-hosted AI assistant with first-class MCP support. Supports both Claude (Anthropic) and OpenAI as providers, with a web-based chat interface.
 
 ## Quick Start
 
@@ -82,7 +82,15 @@ App configuration is stored in `data/config.json` (created on first setup). MCP 
 
 ## MCP Servers
 
-The assistant supports MCP servers for extended capabilities. Configure them through the setup page or by editing `data/mcp.json` directly.
+The assistant comes pre-configured with these MCP servers:
+
+| Server | Package | Capabilities |
+|--------|---------|-------------|
+| **memory** | `@modelcontextprotocol/server-memory` | Persistent knowledge graph across conversations |
+| **filesystem** | `@modelcontextprotocol/server-filesystem` | Read, write, and manage local files |
+| **cron** | [`mcp-cron`](https://github.com/jolks/mcp-cron) | Schedule shell commands and AI prompts with access to MCP servers |
+
+Add your own through the setup page or by editing `data/mcp.json` directly. Any MCP server that supports stdio transport will work — browse the [MCP server directory](https://github.com/modelcontextprotocol/servers) for more.
 
 ### Claude Code MCP servers
 
