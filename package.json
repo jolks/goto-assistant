@@ -1,6 +1,6 @@
 {
   "name": "goto-assistant",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Lightweight, self-hosted personal AI assistant",
   "license": "MIT",
   "type": "module",
