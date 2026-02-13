@@ -4,7 +4,7 @@ import { isConfigured, loadConfig } from "./config.js";
 const app = createApp();
 const server = createServer(app);
 
-const port = isConfigured() ? loadConfig().server.port : 3000;
+const port = Number(process.env.PORT) || (isConfigured() ? loadConfig().server.port : 3000);
 
 server.listen(port, () => {
   console.log(`goto-assistant running at http://localhost:${port}`);
