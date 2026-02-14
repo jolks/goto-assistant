@@ -34,6 +34,7 @@ vi.mock("@openai/agents", () => {
         },
       };
     }),
+    shellTool: vi.fn().mockImplementation(() => ({ type: "shell", name: "shell" })),
   };
 });
 

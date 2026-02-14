@@ -45,6 +45,10 @@ npm publish            # publish to npm
 - `src/agents/claude.ts` — uses `@anthropic-ai/claude-agent-sdk`, supports session resumption
 - `src/agents/openai.ts` — uses `@openai/agents`, manages MCP server lifecycle
 
+**Built-in tools** (critical provider difference):
+- **Claude**: The Agent SDK provides built-in tools (Bash, Read, Write, Edit, Glob, Grep, etc.) automatically. With `permissionMode: "bypassPermissions"`, the agent can execute shell commands and file operations out of the box. `allowedTools` is set to MCP tool patterns only, but built-in tools remain available.
+- **OpenAI**: The Agents SDK has equivalent local built-in tools — `shellTool()` (Bash equivalent), `applyPatchTool()` (Edit/Write equivalent), `computerTool()` (screen automation) — but they require explicit setup. `shellTool()` in local mode needs a custom `Shell` implementation that handles `child_process.exec()`. There are also hosted tools (`webSearchTool()`, `fileSearchTool()`, `codeInterpreterTool()`, `imageGenerationTool()`) that run on OpenAI's servers. Currently configured: `shellTool()` with a `LocalShell` class that executes commands via `child_process.exec()` (30s timeout, 1MB buffer). Not yet configured: `applyPatchTool()`, `computerTool()`.
+
 **Conversation history** (critical provider difference):
 - **Claude**: Uses SDK session resumption (`options.resume = sessionId`). The SDK maintains history server-side — we only pass the new message each turn.
 - **OpenAI**: Stateless — has no session resumption. We must load the full message history from SQLite and pass it as the input array on every turn. See `runOpenAI()` which builds `inputMessages` from `history` parameter. Assistant messages must use `content: [{ type: "output_text", text }]` format (not plain strings) or the SDK throws `item.content.map is not a function`.

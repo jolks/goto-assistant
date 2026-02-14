@@ -1,9 +1,43 @@
-import { Agent, run, MCPServerStdio } from "@openai/agents";
+import { Agent, run, MCPServerStdio, shellTool } from "@openai/agents";
+import type { Shell, ShellAction, ShellResult, ShellOutputResult } from "@openai/agents";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import type { Config, McpServerConfig } from "../config.js";
 import { MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
 import { getUpload } from "../uploads.js";
+
+const execAsync = promisify(exec);
+
+class LocalShell implements Shell {
+  async run(action: ShellAction): Promise<ShellResult> {
+    const output: ShellOutputResult[] = [];
+    for (const command of action.commands) {
+      let stdout = "";
+      let stderr = "";
+      let outcome: ShellOutputResult["outcome"] = { type: "exit", exitCode: 0 };
+      try {
+        const result = await execAsync(command, {
+          timeout: action.timeoutMs ?? 30_000,
+          maxBuffer: action.maxOutputLength ?? 1024 * 1024,
+        });
+        stdout = result.stdout;
+        stderr = result.stderr;
+      } catch (error: unknown) {
+        const err = error as { code?: number; killed?: boolean; signal?: string; stdout?: string; stderr?: string; message?: string };
+        stdout = err.stdout ?? "";
+        stderr = err.stderr ?? err.message ?? "";
+        outcome = err.killed || err.signal === "SIGTERM"
+          ? { type: "timeout" }
+          : { type: "exit", exitCode: typeof err.code === "number" ? err.code : 1 };
+      }
+      output.push({ stdout, stderr, outcome });
+      if (outcome.type === "timeout") break;
+    }
+    return { output };
+  }
+}
 
 export async function runOpenAI(
   prompt: string,
@@ -46,9 +80,12 @@ export async function runOpenAI(
     const agent = new Agent({
       name: "goto-assistant",
       instructions:
-        "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
+        "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. You also have a shell tool to execute commands on the host machine. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
       model: config.openai.model,
       mcpServers,
+      tools: [
+        shellTool({ shell: new LocalShell() }),
+      ],
     });
 
     // Build conversation input with history
