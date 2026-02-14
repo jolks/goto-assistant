@@ -14,7 +14,7 @@ export interface Config {
   server: { port: number };
 }
 
-export const DATA_DIR = path.join(process.cwd(), process.env.GOTO_DATA_DIR || "data");
+export const DATA_DIR = process.env.GOTO_DATA_DIR || path.join(process.cwd(), "data");
 const CONFIG_PATH = path.join(DATA_DIR, "config.json");
 export const MCP_CONFIG_PATH = path.join(DATA_DIR, "mcp.json");
 export const MEMORY_FILE_PATH = path.join(DATA_DIR, "memory.json");

@@ -34,6 +34,10 @@ describe("config", () => {
     expect(DATA_DIR).toContain("tests/data");
   });
 
+  it("uses GOTO_DATA_DIR directly without prepending cwd", () => {
+    expect(DATA_DIR).toBe(process.env.GOTO_DATA_DIR);
+  });
+
   it("isConfigured returns false when config file is missing", () => {
     expect(isConfigured()).toBe(false);
   });
