@@ -81,7 +81,7 @@
     // Thin wrapper that passes mutable state to the extracted syncCronConfig
     function doSyncCronConfig() {
       servers = readServers();
-      servers = syncCronConfig(servers, isEditing, buildCronConfig);
+      servers = syncCronConfig(servers, isEditing, buildCronConfig, window._savedConfig);
       renderServers(servers);
     }
 

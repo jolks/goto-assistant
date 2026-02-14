@@ -64,6 +64,7 @@ describe("config", () => {
     saveConfig(testConfig);
     const loaded = loadConfig();
     expect(loaded.provider).toBe("claude");
+    expect(loaded.claude.apiKey).toBe("sk-ant-test123456");
     expect(loaded.claude.model).toBe("claude-sonnet-4-5-20250929");
     expect(loaded.server.port).toBe(3000);
   });

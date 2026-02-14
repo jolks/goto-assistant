@@ -72,7 +72,7 @@ function readServers() {
 // Sync cron server config. Takes servers array, isEditing flag, and buildCronConfigFn.
 // Returns updated servers array (mutates in place for convenience, also returns).
 // eslint-disable-next-line no-unused-vars
-function syncCronConfig(servers, isEditing, buildCronConfigFn) {
+function syncCronConfig(servers, isEditing, buildCronConfigFn, savedConfig) {
   var cron = servers.find(function (s) { return s.name === 'cron'; });
   if (!cron) return servers;
 
@@ -98,9 +98,14 @@ function syncCronConfig(servers, isEditing, buildCronConfigFn) {
     oldKeys.forEach(function (k) { delete cron.env[k]; });
     cron.env[result.envKey] = result.envValue;
   } else if (oldKeys.length > 0 && oldKeys[0] !== result.envKey) {
-    var existingValue = cron.env[oldKeys[0]];
+    // Use the target provider's masked key from savedConfig when available
+    var targetValue = cron.env[oldKeys[0]];
+    if (savedConfig) {
+      var pc = savedConfig[provider] || {};
+      if (pc.apiKey) targetValue = pc.apiKey;
+    }
     oldKeys.forEach(function (k) { delete cron.env[k]; });
-    cron.env[result.envKey] = existingValue;
+    cron.env[result.envKey] = targetValue;
   }
 
   return servers;

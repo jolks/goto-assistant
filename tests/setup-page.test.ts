@@ -301,7 +301,7 @@ describe("setup page", () => {
       expect(cron.args).toContain("--ai-provider openai");
     });
 
-    it("renames env key when provider changes in edit mode with empty apiKey", () => {
+    it("renames env key and shows target provider masked key from savedConfig", () => {
       setProvider("openai");
       setField("apiKey", "");
       setModel("gpt-4o");
@@ -311,15 +311,43 @@ describe("setup page", () => {
           name: "cron",
           command: "npx",
           args: "-y mcp-cron --transport stdio --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929",
-          env: { ANTHROPIC_API_KEY: "sk-existing-key" },
+          env: { ANTHROPIC_API_KEY: "sk-a****3456" },
         },
       ];
+      const savedConfig = {
+        claude: { apiKey: "sk-a****3456", model: "claude-sonnet-4-5-20250929" },
+        openai: { apiKey: "sk-o****7890", model: "gpt-4o" },
+      };
 
-      const result = syncCronConfig(servers, true, buildCronConfig);
+      const result = syncCronConfig(servers, true, buildCronConfig, savedConfig);
       const cron = result.find((s: Server) => s.name === "cron");
       expect(cron.env).not.toHaveProperty("ANTHROPIC_API_KEY");
-      expect(cron.env.OPENAI_API_KEY).toBe("sk-existing-key");
+      expect(cron.env.OPENAI_API_KEY).toBe("sk-o****7890");
       expect(cron.args).toContain("--ai-provider openai");
+    });
+
+    it("falls back to existing env value when savedConfig has no target key", () => {
+      setProvider("openai");
+      setField("apiKey", "");
+      setModel("gpt-4o");
+
+      const servers: Server[] = [
+        {
+          name: "cron",
+          command: "npx",
+          args: "-y mcp-cron --transport stdio --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929",
+          env: { ANTHROPIC_API_KEY: "sk-a****3456" },
+        },
+      ];
+      const savedConfig = {
+        claude: { apiKey: "sk-a****3456", model: "claude-sonnet-4-5-20250929" },
+        openai: {},
+      };
+
+      const result = syncCronConfig(servers, true, buildCronConfig, savedConfig);
+      const cron = result.find((s: Server) => s.name === "cron");
+      expect(cron.env).not.toHaveProperty("ANTHROPIC_API_KEY");
+      expect(cron.env.OPENAI_API_KEY).toBe("sk-a****3456");
     });
 
     it("returns servers unchanged when no cron server exists", () => {
