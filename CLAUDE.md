@@ -32,6 +32,11 @@ npx vitest run tests/config.test.ts   # run a single test file
 # Packaging
 npm pack --dry-run     # verify tarball contents
 npm publish            # publish to npm
+
+# Release — just push a tag; CI does the rest
+git tag v<version> && git push origin v<version>
+# Release workflow: sets version from tag, builds, tests, publishes to npm, creates GitHub release
+# Do NOT manually edit version in package.json — it stays at 0.0.0 and is set dynamically by CI
 ```
 
 ## Architecture
