@@ -66,12 +66,12 @@ npm publish            # publish to npm
 
 **Configuration**: `src/config.ts` — app config stored in `data/config.json`, MCP server config stored separately in `data/mcp.json`. `mcp.json` is the single source of truth for MCP servers — edited directly by users, read by mcp-cron and the app. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) override file config. API keys are masked in API responses. `PORT` env var overrides configured port. `GOTO_DATA_DIR` env var overrides the data directory (default `./data` for dev, `~/.goto-assistant` via npx).
 
-**Frontend** (`public/`): Vanilla JS, no framework. `index.html` is the chat UI, `setup.html` is the first-run config wizard. `cron-sync.js` syncs MCP cron server config with provider settings.
+**Frontend** (`public/`): Vanilla JS, no framework. `index.html` is the chat UI, `setup.html` is the first-run config wizard. `setup.js` contains extracted setup page functions (provider switching, server rendering, cron config sync) — testable via jsdom. `cron-sync.js` derives mcp-cron args/env from provider settings. Both JS files use CJS `module.exports` guards for test imports while remaining plain `<script>` tags in the browser.
 
 ## Key Patterns
 
 - ES modules throughout (`"type": "module"`, `NodeNext` module resolution)
 - Strict TypeScript enabled
-- Tests use Vitest with `vi.mock()` to avoid real API calls
+- Tests use Vitest with `vi.mock()` to avoid real API calls; frontend tests use `// @vitest-environment jsdom` per-file directive
 - `data/` directory is gitignored — holds runtime state (config, SQLite DB)
 - MCP servers live in `data/mcp.json` (not `config.json`) and are passed as a separate parameter to agent functions
