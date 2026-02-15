@@ -6,6 +6,7 @@ var defaultServers = [
   { name: 'cron', command: 'npx', args: '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929', env: {} },
   { name: 'memory', command: 'npx', args: '-y @modelcontextprotocol/server-memory', env: {} },
   { name: 'filesystem', command: 'npx', args: '-y @modelcontextprotocol/server-filesystem .', env: {} },
+  { name: 'time', command: 'uvx', args: 'mcp-server-time', env: {} },
 ];
 
 // eslint-disable-next-line no-unused-vars

@@ -11,7 +11,8 @@ npx goto-assistant
 Open http://localhost:3000 — first run redirects to setup page for API key config.
 
 ### Requirements
-- Node.js 20.11 or later
+- [Node.js](https://nodejs.org/) 20.11 or later — `npx` runs the app and most MCP servers
+- [uv](https://docs.astral.sh/uv/) — `uvx` runs the time MCP server (Python-based)
 - Anthropic or OpenAI API key
 
 ### Data Storage
@@ -132,6 +133,7 @@ The assistant comes pre-configured with these MCP servers:
 |--------|---------|-------------|
 | **memory** | [`@modelcontextprotocol/server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) | Persistent knowledge graph across conversations |
 | **filesystem** | [`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) | Read, write, and manage local files |
+| **time** | [`mcp-server-time`](https://github.com/modelcontextprotocol/servers/tree/main/src/time) | Current time and timezone conversions |
 | **cron** | [`mcp-cron`](https://github.com/jolks/mcp-cron) | Schedule or run on-demand shell commands and AI prompts with access to MCP servers |
 
 Add your own through the setup page or by editing `data/mcp.json` directly. Any MCP server that supports stdio transport will work — browse the [MCP server directory](https://github.com/modelcontextprotocol/servers) for more.
