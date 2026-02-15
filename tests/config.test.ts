@@ -28,6 +28,7 @@ describe("config", () => {
     if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.PORT;
   });
 
   it("uses tests/data as DATA_DIR", () => {
@@ -74,6 +75,13 @@ describe("config", () => {
     process.env.ANTHROPIC_API_KEY = "env-override-key";
     const loaded = loadConfig();
     expect(loaded.claude.apiKey).toBe("env-override-key");
+  });
+
+  it("PORT environment variable overrides config port", () => {
+    saveConfig(testConfig);
+    process.env.PORT = "4000";
+    const loaded = loadConfig();
+    expect(loaded.server.port).toBe(4000);
   });
 
   it("maskApiKey masks the middle of a key", () => {

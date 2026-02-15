@@ -12,6 +12,7 @@ export interface Config {
   claude: { apiKey: string; model: string; baseUrl: string };
   openai: { apiKey: string; model: string; baseUrl: string };
   server: { port: number };
+  configVersion?: number;
 }
 
 export const DATA_DIR = process.env.GOTO_DATA_DIR || path.join(process.cwd(), "data");
@@ -34,6 +35,9 @@ export function loadConfig(): Config {
   }
   if (process.env.OPENAI_API_KEY) {
     config.openai.apiKey = process.env.OPENAI_API_KEY;
+  }
+  if (process.env.PORT) {
+    config.server.port = Number(process.env.PORT);
   }
 
   return config;

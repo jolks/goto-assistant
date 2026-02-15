@@ -16,6 +16,7 @@ vi.mock("../src/agents/openai.js", () => ({
 
 import { createApp } from "../src/server.js";
 import { saveConfig, saveMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
+import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
 import { UPLOADS_DIR } from "../src/uploads.js";
 
@@ -70,13 +71,15 @@ describe("server", () => {
     expect(cssRes.status).toBe(200);
   });
 
-  it("POST /api/setup saves config", async () => {
+  it("POST /api/setup saves config with configVersion", async () => {
     const app = createApp();
     const res = await makeRequest(app, "POST", "/api/setup", true, testConfig);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(fs.existsSync(CONFIG_PATH)).toBe(true);
+    const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    expect(saved.configVersion).toBe(CURRENT_CONFIG_VERSION);
   });
 
   it("POST /api/setup saves mcpServers to mcp.json when included", async () => {

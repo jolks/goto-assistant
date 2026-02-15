@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import multer from "multer";
 import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, type Config, type McpServerConfig } from "./config.js";
+import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
 import { saveUpload, getUpload, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
@@ -92,6 +93,7 @@ export function createApp(): Express {
       claude: { ...existing.claude, ...incoming.claude },
       openai: { ...existing.openai, ...incoming.openai },
       server: incoming.server,
+      configVersion: CURRENT_CONFIG_VERSION,
     };
     saveConfig(config);
     if (mcpServers) {
