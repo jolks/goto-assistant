@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.svg" alt="goto-assistant" width="200">
+</p>
+
 # goto-assistant
 
 Lightweight, self-hosted AI assistant with first-class MCP support. Supports both Claude (Anthropic) and OpenAI as providers, with a web-based chat interface.

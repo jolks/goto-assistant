@@ -1,0 +1,6 @@
+<svg width="280" height="140" viewBox="0 0 280 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <text x="140" y="70" text-anchor="middle" fill="#f97316" font-size="64" font-family="monospace" font-weight="700">goto</text>
+  <rect x="117" y="46" width="8" height="8" fill="#f97316"/>
+  <rect x="194" y="46" width="8" height="8" fill="#f97316"/>
+  <path d="M 145 82 L 152 89 L 168 89 L 175 82" stroke="#f97316" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

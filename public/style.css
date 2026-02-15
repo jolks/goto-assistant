@@ -93,9 +93,10 @@ body {
 .chat-main { flex: 1; display: flex; flex-direction: column; }
 
 .chat-header {
-  padding: 12px 20px; border-bottom: 1px solid #e0e0e0; background: #fff;
+  padding: 12px 20px; border-bottom: 1px solid #e0e0e0; background: #fff; height: 65px;
   display: flex; justify-content: space-between; align-items: center;
 }
+.header-logo { height: 40px; width: auto; }
 .chat-header h2 { font-size: 16px; }
 .settings-btn {
   background: none; border: none; cursor: pointer; font-size: 20px; padding: 4px 8px;
@@ -197,4 +198,57 @@ body {
   /* Setup page mobile */
   .setup-container { margin: 16px; padding: 20px; }
   .radio-group { flex-direction: column; gap: 8px; }
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  body { background: #1a1a1a; color: #e5e5e5; }
+
+  /* Setup page */
+  .setup-container { background: #2a2a2a; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+  .form-group input, .form-group select { background: #333; border-color: #444; color: #e5e5e5; }
+  .form-group input:focus, .form-group select:focus { border-color: #4a9eff; background: #3a3a3a; }
+  .btn-secondary { background: #444; color: #e5e5e5; }
+  .btn-secondary:hover { background: #555; }
+  .status-msg.error { background: #3a1a1a; color: #f88; }
+  .status-msg.success { background: #1a3a1a; color: #8f8; }
+
+  /* MCP servers */
+  .mcp-server { background: #333; border-color: #444; }
+  .btn-icon { border-color: #444; color: #e5e5e5; }
+
+  /* Sidebar */
+  .sidebar { background: #222; border-right-color: #333; }
+  .sidebar-header { border-bottom-color: #333; }
+  .conversation-item:hover { background: #333; }
+  .conversation-item.active { background: #2a3a4a; }
+  .conversation-item .delete-btn { color: #888; }
+  .conversation-item .delete-btn:hover { color: #f88; background: #3a1a1a; border-color: #522; }
+
+  /* Chat header */
+  .chat-header { background: #222; border-bottom-color: #333; }
+  .settings-btn:hover { background: #333; }
+  .hamburger-btn:hover { background: #333; }
+
+  /* Messages */
+  .message.user { background: #2a3a4a; }
+  .message.assistant { background: #2a2a2a; border-color: #444; }
+  .message pre { background: #333; }
+  .message blockquote { border-left-color: #555; color: #aaa; }
+
+  /* Input area */
+  .input-area { background: #222; border-top-color: #333; }
+  .input-row textarea { background: #333; border-color: #444; color: #e5e5e5; }
+  .input-row textarea:focus { border-color: #4a9eff; }
+
+  /* File upload */
+  .file-upload-btn { border-color: #444; color: #e5e5e5; }
+  .file-upload-btn:hover { background: #333; border-color: #555; }
+  .file-preview-item { border-color: #444; }
+
+  /* Overlay */
+  .sidebar-overlay { background: rgba(0,0,0,0.6); }
+
+  /* Typing indicator */
+  .typing-indicator { color: #888; }
 }
