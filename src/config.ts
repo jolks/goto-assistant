@@ -64,6 +64,61 @@ export function saveMcpServers(servers: Record<string, McpServerConfig>): void {
   fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify({ mcpServers: servers }, null, 2));
 }
 
+export function isMaskedValue(value: string): boolean {
+  return value.includes("****");
+}
+
+/**
+ * Restore masked env values from existing on-disk servers and app config.
+ *
+ * Pass 1: if the same env key exists in the existing server, use the real value.
+ * Pass 2: if the value is still masked and looks like a known API key env var,
+ *         resolve it from config.json (handles provider switches where the key
+ *         name changed, e.g. ANTHROPIC_API_KEY → OPENAI_API_KEY).
+ */
+export function unmaskMcpServers(
+  incoming: Record<string, McpServerConfig>,
+  existing: Record<string, McpServerConfig>,
+  config?: Config
+): Record<string, McpServerConfig> {
+  // Map known env key names to their real values from config
+  const configKeyMap: Record<string, string> = {};
+  if (config) {
+    if (config.claude.apiKey) configKeyMap["ANTHROPIC_API_KEY"] = config.claude.apiKey;
+    if (config.openai.apiKey) configKeyMap["OPENAI_API_KEY"] = config.openai.apiKey;
+    // MCP_CRON_AI_API_KEY is used with proxy — it should match the active provider's key
+    const activeKey = config[config.provider]?.apiKey;
+    if (activeKey) configKeyMap["MCP_CRON_AI_API_KEY"] = activeKey;
+  }
+
+  return Object.fromEntries(
+    Object.entries(incoming).map(([name, server]) => {
+      if (!server.env) return [name, server];
+
+      const mergedEnv = Object.fromEntries(
+        Object.entries(server.env).map(([k, v]) => {
+          if (!isMaskedValue(v)) return [k, v];
+
+          // Pass 1: restore from existing on-disk server
+          const existingServer = existing[name];
+          if (existingServer?.env?.[k]) {
+            return [k, existingServer.env[k]];
+          }
+
+          // Pass 2: resolve from app config (handles provider switches)
+          if (configKeyMap[k]) {
+            return [k, configKeyMap[k]];
+          }
+
+          return [k, v];
+        })
+      );
+
+      return [name, { ...server, env: mergedEnv }];
+    })
+  );
+}
+
 export function maskApiKey(key: string): string {
   if (key.length <= 8) return "****";
   return key.slice(0, 4) + "****" + key.slice(-4);

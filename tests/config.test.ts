@@ -6,7 +6,7 @@ vi.hoisted(() => {
 
 import fs from "node:fs";
 import path from "node:path";
-import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
+import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 
 const CONFIG_PATH = path.join(DATA_DIR, "config.json");
 
@@ -121,5 +121,145 @@ describe("config", () => {
     const masked = getMaskedMcpServers(servers);
     expect(masked.cron.env!.ANTHROPIC_API_KEY).toContain("****");
     expect(masked.cron.env!.SOME_PATH).toBe("/usr/bin");
+  });
+
+  it("isMaskedValue detects masked values", () => {
+    expect(isMaskedValue("sk-a****3456")).toBe(true);
+    expect(isMaskedValue("****")).toBe(true);
+    expect(isMaskedValue("sk-ant-real-key-12345")).toBe(false);
+    expect(isMaskedValue("")).toBe(false);
+  });
+
+  it("unmaskMcpServers restores masked env values from existing servers", () => {
+    const existing: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-ant-real-secret-key", SOME_PATH: "/usr/bin" },
+      },
+    };
+    const incoming: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-a****-key", SOME_PATH: "/usr/bin" },
+      },
+    };
+    const result = unmaskMcpServers(incoming, existing);
+    expect(result.cron.env!.ANTHROPIC_API_KEY).toBe("sk-ant-real-secret-key");
+    expect(result.cron.env!.SOME_PATH).toBe("/usr/bin");
+  });
+
+  it("unmaskMcpServers keeps new values when not masked", () => {
+    const existing: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-ant-old-key-12345" },
+      },
+    };
+    const incoming: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-ant-brand-new-key" },
+      },
+    };
+    const result = unmaskMcpServers(incoming, existing);
+    expect(result.cron.env!.ANTHROPIC_API_KEY).toBe("sk-ant-brand-new-key");
+  });
+
+  it("unmaskMcpServers handles new servers not in existing", () => {
+    const existing: Record<string, McpServerConfig> = {};
+    const incoming: Record<string, McpServerConfig> = {
+      newserver: {
+        command: "npx",
+        args: ["-y", "new-server"],
+        env: { API_KEY: "sk-new-key-value" },
+      },
+    };
+    const result = unmaskMcpServers(incoming, existing);
+    expect(result.newserver.env!.API_KEY).toBe("sk-new-key-value");
+  });
+
+  it("unmaskMcpServers handles servers without env", () => {
+    const existing: Record<string, McpServerConfig> = {
+      memory: { command: "npx", args: ["-y", "server-memory"] },
+    };
+    const incoming: Record<string, McpServerConfig> = {
+      memory: { command: "npx", args: ["-y", "server-memory"] },
+    };
+    const result = unmaskMcpServers(incoming, existing);
+    expect(result.memory.env).toBeUndefined();
+  });
+
+  it("unmaskMcpServers resolves masked OPENAI_API_KEY from config after provider switch", () => {
+    // Existing on disk has ANTHROPIC_API_KEY (old provider)
+    const existing: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-ant-real-key-12345" },
+      },
+    };
+    // Frontend switched to OpenAI and sent masked OpenAI key
+    const incoming: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { OPENAI_API_KEY: "sk-o****t789" },
+      },
+    };
+    // Config has the real OpenAI key
+    const config: Config = {
+      provider: "openai",
+      claude: { apiKey: "sk-ant-real-key-12345", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
+      openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "" },
+      server: { port: 3000 },
+    };
+    const result = unmaskMcpServers(incoming, existing, config);
+    expect(result.cron.env!.OPENAI_API_KEY).toBe("sk-openai-test789");
+  });
+
+  it("unmaskMcpServers resolves masked MCP_CRON_AI_API_KEY from active provider", () => {
+    const existing: Record<string, McpServerConfig> = {
+      cron: { command: "npx", args: ["-y", "mcp-cron"], env: {} },
+    };
+    const incoming: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { MCP_CRON_AI_API_KEY: "sk-a****3456" },
+      },
+    };
+    const config: Config = {
+      provider: "claude",
+      claude: { apiKey: "sk-ant-test123456", model: "claude-sonnet-4-5-20250929", baseUrl: "http://proxy" },
+      openai: { apiKey: "", model: "", baseUrl: "" },
+      server: { port: 3000 },
+    };
+    const result = unmaskMcpServers(incoming, existing, config);
+    expect(result.cron.env!.MCP_CRON_AI_API_KEY).toBe("sk-ant-test123456");
+  });
+
+  it("unmaskMcpServers prefers existing server value over config for same key", () => {
+    // If the cron env was manually set to a different key than config, preserve it
+    const existing: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-ant-custom-manual-key" },
+      },
+    };
+    const incoming: Record<string, McpServerConfig> = {
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-a****-key" },
+      },
+    };
+    const result = unmaskMcpServers(incoming, existing, testConfig);
+    // Pass 1 (existing server) takes precedence over pass 2 (config)
+    expect(result.cron.env!.ANTHROPIC_API_KEY).toBe("sk-ant-custom-manual-key");
   });
 });

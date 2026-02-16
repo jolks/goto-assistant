@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, type Config, type McpServerConfig } from "./config.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
@@ -97,7 +97,9 @@ export function createApp(): Express {
     };
     saveConfig(config);
     if (mcpServers) {
-      saveMcpServers(mcpServers);
+      const existingMcp = loadMcpServers();
+      const mergedMcp = unmaskMcpServers(mcpServers, existingMcp, config);
+      saveMcpServers(mergedMcp);
     }
     res.json({ ok: true });
   });
@@ -124,7 +126,10 @@ export function createApp(): Express {
       res.status(400).json({ error: "Invalid mcpServers" });
       return;
     }
-    saveMcpServers(mcpServers as Record<string, McpServerConfig>);
+    const existing = loadMcpServers();
+    const appConfig = isConfigured() ? loadConfig() : undefined;
+    const merged = unmaskMcpServers(mcpServers as Record<string, McpServerConfig>, existing, appConfig);
+    saveMcpServers(merged);
     res.json({ ok: true });
   });
 

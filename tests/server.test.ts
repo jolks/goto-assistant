@@ -139,6 +139,102 @@ describe("server", () => {
     expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(true);
   });
 
+  it("POST /api/mcp-servers preserves real API key when masked value is sent", async () => {
+    // Pre-save servers with a real API key
+    saveMcpServers({
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { ANTHROPIC_API_KEY: "sk-ant-real-secret-key-123" },
+      },
+    });
+    const app = createApp();
+
+    // Simulate frontend sending back the masked value
+    const res = await makeRequest(app, "POST", "/api/mcp-servers", true, {
+      mcpServers: {
+        cron: {
+          command: "npx",
+          args: ["-y", "mcp-cron"],
+          env: { ANTHROPIC_API_KEY: "sk-a****-123" },
+        },
+      },
+    });
+    expect(res.status).toBe(200);
+
+    // Verify the real key was preserved on disk
+    const saved = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, "utf-8"));
+    expect(saved.mcpServers.cron.env.ANTHROPIC_API_KEY).toBe("sk-ant-real-secret-key-123");
+  });
+
+  it("POST /api/setup preserves real MCP API key when masked value is sent", async () => {
+    saveConfig(testConfig);
+    saveMcpServers({
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron"],
+        env: { OPENAI_API_KEY: "sk-openai-real-key-456" },
+      },
+    });
+    const app = createApp();
+
+    const payload = {
+      ...testConfig,
+      mcpServers: {
+        cron: {
+          command: "npx",
+          args: ["-y", "mcp-cron"],
+          env: { OPENAI_API_KEY: "sk-o****-456" },
+        },
+      },
+    };
+    const res = await makeRequest(app, "POST", "/api/setup", true, payload);
+    expect(res.status).toBe(200);
+
+    const saved = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, "utf-8"));
+    expect(saved.mcpServers.cron.env.OPENAI_API_KEY).toBe("sk-openai-real-key-456");
+  });
+
+  it("POST /api/mcp-servers resolves masked key from config after provider switch", async () => {
+    // Temporarily clear env vars so loadConfig() uses file values
+    const savedAnthropicKey = process.env.ANTHROPIC_API_KEY;
+    const savedOpenaiKey = process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      // Config has real keys for both providers
+      saveConfig(testConfig);
+      // Cron currently uses ANTHROPIC_API_KEY
+      saveMcpServers({
+        cron: {
+          command: "npx",
+          args: ["-y", "mcp-cron"],
+          env: { ANTHROPIC_API_KEY: "sk-ant-test123456" },
+        },
+      });
+      const app = createApp();
+
+      // Frontend switched to OpenAI — env key changed, value is masked from config
+      const res = await makeRequest(app, "POST", "/api/mcp-servers", true, {
+        mcpServers: {
+          cron: {
+            command: "npx",
+            args: ["-y", "mcp-cron"],
+            env: { OPENAI_API_KEY: "sk-o****t789" },
+          },
+        },
+      });
+      expect(res.status).toBe(200);
+
+      // Backend should resolve the real OpenAI key from config.json
+      const saved = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, "utf-8"));
+      expect(saved.mcpServers.cron.env.OPENAI_API_KEY).toBe("sk-test789");
+    } finally {
+      if (savedAnthropicKey) process.env.ANTHROPIC_API_KEY = savedAnthropicKey;
+      if (savedOpenaiKey) process.env.OPENAI_API_KEY = savedOpenaiKey;
+    }
+  });
+
   it("POST /api/setup preserves existing API key and model when omitted", async () => {
     // Temporarily clear env var so loadConfig() uses the file value as-is
     const savedEnvKey = process.env.ANTHROPIC_API_KEY;
