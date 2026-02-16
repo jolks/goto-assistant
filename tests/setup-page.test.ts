@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { buildCronConfig } from "../public/cron-sync.js";
+import { buildCronConfig, escapeHtml } from "../public/cron-sync.js";
 import {
   defaultServers,
   getProvider,
@@ -10,6 +10,10 @@ import {
   syncCronConfig,
   handleProviderSwitch,
 } from "../public/setup.js";
+
+// In the browser, cron-sync.js var declarations become window globals.
+// Replicate this for the test environment so setup.js can find them.
+(globalThis as Record<string, unknown>).escapeHtml = escapeHtml;
 
 interface Server {
   name: string;

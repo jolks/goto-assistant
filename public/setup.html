@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <script src="/cron-sync.js"></script>
   <script src="/setup.js"></script>
   <script src="/setup-chat.js"></script>
@@ -131,7 +132,7 @@
         const data = await res.json();
         if (!res.ok) { showStatus(data.error, 'error'); return; }
         select.innerHTML = data.models.map(m =>
-          `<option value="${m.id}">${m.name}</option>`
+          `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`
         ).join('');
         showStatus('Models loaded', 'success');
       } catch (e) {
@@ -225,7 +226,7 @@
           }
           if (c[c.provider]?.model) {
             const select = document.getElementById('model');
-            select.innerHTML = `<option value="${c[c.provider].model}">${c[c.provider].model}</option>`;
+            select.innerHTML = `<option value="${escapeHtml(c[c.provider].model)}">${escapeHtml(c[c.provider].model)}</option>`;
           }
         }
         if (mcpData.mcpServers && Object.keys(mcpData.mcpServers).length > 0) {

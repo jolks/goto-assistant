@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { buildCronConfig } from "../public/cron-sync.js";
+import { buildCronConfig, escapeHtml, DEFAULT_CRON_ARGS } from "../public/cron-sync.js";
 import {
   renderServers,
   readServers,
@@ -13,6 +13,8 @@ import {
 // In the browser, <script> var declarations become window globals.
 // Replicate this for the test environment so setup-chat.js can find them.
 (globalThis as Record<string, unknown>).buildCronConfig = buildCronConfig;
+(globalThis as Record<string, unknown>).escapeHtml = escapeHtml;
+(globalThis as Record<string, unknown>).DEFAULT_CRON_ARGS = DEFAULT_CRON_ARGS;
 (globalThis as Record<string, unknown>).readServers = readServers;
 (globalThis as Record<string, unknown>).renderServers = renderServers;
 (globalThis as Record<string, unknown>).syncCronConfig = syncCronConfig;

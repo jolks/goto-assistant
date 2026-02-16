@@ -1,7 +1,6 @@
 // setup.js — extracted functions from setup.html for testability.
 // Loaded as a plain <script> in the browser; importable via require() in tests.
 
-// eslint-disable-next-line no-unused-vars
 var defaultServers = [
   { name: 'cron', command: 'npx', args: '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929', env: {} },
   { name: 'memory', command: 'npx', args: '-y @modelcontextprotocol/server-memory', env: {} },
@@ -9,12 +8,10 @@ var defaultServers = [
   { name: 'time', command: 'uvx', args: 'mcp-server-time', env: {} },
 ];
 
-// eslint-disable-next-line no-unused-vars
 function getProvider() {
   return document.querySelector('input[name="provider"]:checked').value;
 }
 
-// eslint-disable-next-line no-unused-vars
 function renderServers(servers) {
   var container = document.getElementById('mcpServers');
   container.innerHTML = '';
@@ -45,7 +42,6 @@ function renderServers(servers) {
   });
 }
 
-// eslint-disable-next-line no-unused-vars
 function readServers() {
   var container = document.getElementById('mcpServers');
   var items = container.querySelectorAll('.mcp-server');
@@ -66,7 +62,6 @@ function readServers() {
 
 // Sync cron server config. Takes servers array, isEditing flag, and buildCronConfigFn.
 // Returns updated servers array (mutates in place for convenience, also returns).
-// eslint-disable-next-line no-unused-vars
 function syncCronConfig(servers, isEditing, buildCronConfigFn, savedConfig) {
   var cron = servers.find(function (s) { return s.name === 'cron'; });
   if (!cron) return servers;
@@ -107,7 +102,6 @@ function syncCronConfig(servers, isEditing, buildCronConfigFn, savedConfig) {
 }
 
 // Handle provider switch: pre-fill baseUrl and model from saved config.
-// eslint-disable-next-line no-unused-vars
 function handleProviderSwitch(isEditing, savedConfig) {
   if (!isEditing || !savedConfig) return;
 
@@ -116,9 +110,9 @@ function handleProviderSwitch(isEditing, savedConfig) {
   document.getElementById('baseUrl').value = pc.baseUrl || '';
   var select = document.getElementById('model');
   if (pc.model) {
-    select.innerHTML = '<option value="' + pc.model + '">' + pc.model + '</option>';
+    select.innerHTML = '<option value="' + escapeHtml(pc.model) + '">' + escapeHtml(pc.model) + '</option>';
   } else {
-    select.innerHTML = '<option value="">— Load models —</option>';
+    select.innerHTML = '<option value="">\u2014 Load models \u2014</option>';
   }
 }
 

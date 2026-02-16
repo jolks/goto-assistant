@@ -3,7 +3,6 @@
 // Loaded as a plain <script> in the browser; importable via require() in tests.
 
 // States: provider → api_key → base_url → loading_models → model → saving → ai_chat
-// eslint-disable-next-line no-unused-vars
 var setupChatState = {
   current: 'provider',
   provider: null,
@@ -16,13 +15,12 @@ var setupChatState = {
   streamingEl: null,
 };
 
-// eslint-disable-next-line no-unused-vars
 function addMessage(role, text) {
   var container = document.getElementById('chatMessages');
   var div = document.createElement('div');
   div.className = 'message ' + role;
   if (typeof marked !== 'undefined' && marked.parse) {
-    div.innerHTML = marked.parse(text);
+    div.innerHTML = DOMPurify.sanitize(marked.parse(text));
   } else {
     div.textContent = text;
   }
@@ -31,7 +29,6 @@ function addMessage(role, text) {
   return div;
 }
 
-// eslint-disable-next-line no-unused-vars
 function showChoices(options, onSelect) {
   var container = document.getElementById('chatChoices');
   container.innerHTML = '';
@@ -50,7 +47,6 @@ function showChoices(options, onSelect) {
   container.appendChild(choicesDiv);
 }
 
-// eslint-disable-next-line no-unused-vars
 function setInputMode(mode) {
   var textarea = document.getElementById('chatInput');
   var sendBtn = document.getElementById('chatSendBtn');
@@ -77,9 +73,8 @@ function setInputMode(mode) {
 }
 
 // Build default MCP servers object using buildCronConfig from cron-sync.js
-// eslint-disable-next-line no-unused-vars
 function buildDefaultMcpServers(provider, apiKey, model, baseUrl) {
-  var cronArgs = '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929';
+  var cronArgs = DEFAULT_CRON_ARGS;
   var cronResult = buildCronConfig({
     provider: provider,
     apiKey: apiKey,
@@ -112,7 +107,6 @@ function buildDefaultMcpServers(provider, apiKey, model, baseUrl) {
   return servers;
 }
 
-// eslint-disable-next-line no-unused-vars
 async function loadModelsForChat(provider, apiKey, baseUrl) {
   var res = await fetch('/api/models', {
     method: 'POST',
@@ -124,7 +118,6 @@ async function loadModelsForChat(provider, apiKey, baseUrl) {
   return data.models;
 }
 
-// eslint-disable-next-line no-unused-vars
 async function saveSetupConfig(provider, apiKey, model, baseUrl, mcpServers) {
   var providerConfig = {};
   if (apiKey) providerConfig.apiKey = apiKey;
@@ -145,17 +138,8 @@ async function saveSetupConfig(provider, apiKey, model, baseUrl, mcpServers) {
     body: JSON.stringify(config),
   });
   if (!res.ok) throw new Error('Failed to save config');
-
-  // Also save MCP servers separately
-  var mcpRes = await fetch('/api/mcp-servers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mcpServers: mcpServers }),
-  });
-  if (!mcpRes.ok) throw new Error('Failed to save MCP servers');
 }
 
-// eslint-disable-next-line no-unused-vars
 function addSetupTypingIndicator() {
   var container = document.getElementById('chatMessages');
   var el = document.createElement('div');
@@ -166,13 +150,11 @@ function addSetupTypingIndicator() {
   container.scrollTop = container.scrollHeight;
 }
 
-// eslint-disable-next-line no-unused-vars
 function removeSetupTypingIndicator() {
   var el = document.getElementById('setupTyping');
   if (el) el.remove();
 }
 
-// eslint-disable-next-line no-unused-vars
 function connectAiChat() {
   var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   var ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
@@ -187,7 +169,7 @@ function connectAiChat() {
         setupChatState.streamingEl = addMessage('assistant', '');
       }
       if (typeof marked !== 'undefined' && marked.parse) {
-        setupChatState.streamingEl.innerHTML = marked.parse(setupChatState.streamingText);
+        setupChatState.streamingEl.innerHTML = DOMPurify.sanitize(marked.parse(setupChatState.streamingText));
       } else {
         setupChatState.streamingEl.textContent = setupChatState.streamingText;
       }
@@ -210,6 +192,10 @@ function connectAiChat() {
     }
   });
 
+  ws.addEventListener('error', function () {
+    addMessage('assistant', 'Connection error. Please check your network and refresh the page.');
+  });
+
   ws.addEventListener('close', function () {
     setupChatState.ws = null;
   });
@@ -217,7 +203,6 @@ function connectAiChat() {
   return ws;
 }
 
-// eslint-disable-next-line no-unused-vars
 function sendAiMessage(text) {
   if (!setupChatState.ws || setupChatState.ws.readyState !== WebSocket.OPEN) {
     addMessage('assistant', 'Connection lost. Please refresh the page.');
@@ -235,7 +220,6 @@ function sendAiMessage(text) {
 }
 
 // Handle input from chat textarea
-// eslint-disable-next-line no-unused-vars
 function handleInput(text) {
   var state = setupChatState.current;
 
@@ -277,7 +261,7 @@ function handleInput(text) {
         // Update the form model dropdown
         var select = document.getElementById('model');
         select.innerHTML = models.map(function (m) {
-          return '<option value="' + m.id + '">' + m.name + '</option>';
+          return '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.name) + '</option>';
         }).join('');
         // Show model choices in chat
         setupChatState.current = 'model';
@@ -298,7 +282,6 @@ function handleInput(text) {
   }
 }
 
-// eslint-disable-next-line no-unused-vars
 function handleModelSelect(modelId) {
   setupChatState.model = modelId;
   addMessage('user', modelId);
@@ -342,7 +325,6 @@ function handleModelSelect(modelId) {
 }
 
 // Initialize the setup chat panel
-// eslint-disable-next-line no-unused-vars
 function initSetupChat(options) {
   var isEditing = options && options.isEditing;
   var config = options && options.config;
@@ -395,9 +377,7 @@ function initSetupChat(options) {
 // Sync the form's MCP cron server config to match current form field values.
 // Directly calls the global functions from setup.js / cron-sync.js.
 // In the browser, var-declared functions in <script> tags are on window.
-// eslint-disable-next-line no-unused-vars
 function syncCronFromChat() {
-  /* eslint-disable no-undef */
   if (typeof readServers !== 'function' || typeof syncCronConfig !== 'function' ||
       typeof renderServers !== 'function' || typeof buildCronConfig !== 'function') {
     return;
@@ -407,7 +387,6 @@ function syncCronFromChat() {
   var savedCfg = (typeof window !== 'undefined' && window._savedConfig) || undefined;
   srvs = syncCronConfig(srvs, editing, buildCronConfig, savedCfg);
   renderServers(srvs);
-  /* eslint-enable no-undef */
 }
 
 function startQA() {

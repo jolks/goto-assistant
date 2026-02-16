@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 </head>
 <body>
   <div class="chat-layout">
@@ -64,7 +65,7 @@
           currentAssistantEl._raw += msg.text;
           // Update only the text div (last child)
           const textDiv = currentAssistantEl.lastElementChild;
-          if (textDiv) textDiv.innerHTML = marked.parse(currentAssistantEl._raw);
+          if (textDiv) textDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAssistantEl._raw));
         } else if (msg.type === 'done') {
           currentConversationId = msg.conversationId;
           currentAssistantEl = null;
@@ -121,7 +122,7 @@
       const textContent = parsed.text;
       const textEl = document.createElement('div');
       if (role === 'assistant' && textContent) {
-        textEl.innerHTML = marked.parse(textContent);
+        textEl.innerHTML = DOMPurify.sanitize(marked.parse(textContent));
       } else if (textContent) {
         textEl.textContent = textContent;
       }
