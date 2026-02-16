@@ -19,7 +19,7 @@ function renderServers(servers) {
   var container = document.getElementById('mcpServers');
   container.innerHTML = '';
   servers.forEach(function (s, i) {
-    var div = document.createElement('div');
+    var div = document.createElement('article');
     div.className = 'mcp-server';
     var envRows = Object.entries(s.env || {}).map(function (_ref, ei) {
       var k = _ref[0], v = _ref[1];
@@ -30,23 +30,17 @@ function renderServers(servers) {
         '</div>';
     }).join('');
     div.innerHTML =
-      '<div class="mcp-server-header">' +
+      '<header class="mcp-server-header">' +
         '<input type="text" value="' + s.name + '" data-server="' + i + '" data-field="name" placeholder="Server name">' +
         '<button class="btn-icon" onclick="removeServer(' + i + ')">×</button>' +
-      '</div>' +
-      '<div class="form-group">' +
-        '<label>Command</label>' +
-        '<input type="text" value="' + s.command + '" data-server="' + i + '" data-field="command">' +
-      '</div>' +
-      '<div class="form-group">' +
-        '<label>Args</label>' +
-        '<input type="text" value="' + s.args + '" data-server="' + i + '" data-field="args">' +
-      '</div>' +
-      '<div class="form-group">' +
-        '<label>Environment Variables</label>' +
-        envRows +
-        '<button class="btn btn-secondary" style="margin-top:4px;font-size:12px;padding:4px 10px" onclick="addEnv(' + i + ')">+ Add Env</button>' +
-      '</div>';
+      '</header>' +
+      '<label>Command</label>' +
+      '<input type="text" value="' + s.command + '" data-server="' + i + '" data-field="command">' +
+      '<label>Args</label>' +
+      '<input type="text" value="' + s.args + '" data-server="' + i + '" data-field="args">' +
+      '<label>Environment Variables</label>' +
+      envRows +
+      '<button class="secondary outline" style="margin-top:4px;font-size:12px;padding:4px 10px" onclick="addEnv(' + i + ')">+ Add Env</button>';
     container.appendChild(div);
   });
 }

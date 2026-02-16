@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
   <title>goto-assistant</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -21,12 +23,15 @@
     <div class="chat-main">
       <div class="chat-header">
         <button class="hamburger-btn" id="hamburgerBtn">&#9776;</button>
-        <img src="/logo.svg" alt="goto" class="header-logo">
         <h2 id="chatTitle">New Conversation</h2>
         <button class="settings-btn" id="settingsBtn" title="Settings">&#9881;</button>
       </div>
 
-      <div class="messages" id="messages"></div>
+      <div class="messages" id="messages">
+        <div class="empty-state" id="emptyState">
+          <img src="/logo.svg" alt="goto-assistant" class="empty-state-logo">
+        </div>
+      </div>
 
       <div class="input-area">
         <div class="file-preview" id="filePreview"></div>
@@ -82,7 +87,17 @@
       return { text: content };
     }
 
+    function hideEmptyState() {
+      const es = document.getElementById('emptyState');
+      if (es) es.style.display = 'none';
+    }
+    function clearMessages() {
+      const m = document.getElementById('messages');
+      m.innerHTML = '<div class="empty-state" id="emptyState"><img src="/logo.svg" alt="goto-assistant" class="empty-state-logo"></div>';
+    }
+
     function addMessage(role, content, extraAttachments) {
+      hideEmptyState();
       const el = document.createElement('div');
       el.className = 'message ' + role;
       const parsed = parseContent(content);
@@ -221,7 +236,7 @@
     document.getElementById('newChatBtn').addEventListener('click', () => {
       currentConversationId = null;
       currentAssistantEl = null;
-      document.getElementById('messages').innerHTML = '';
+      clearMessages();
       document.getElementById('chatTitle').textContent = 'New Conversation';
       document.querySelectorAll('.conversation-item').forEach(el => el.classList.remove('active'));
       closeSidebar();
@@ -262,7 +277,7 @@
             if (currentConversationId === c.id) {
               currentConversationId = null;
               currentAssistantEl = null;
-              document.getElementById('messages').innerHTML = '';
+              clearMessages();
               document.getElementById('chatTitle').textContent = 'New Conversation';
             }
             loadConversations();
@@ -272,6 +287,7 @@
           titleSpan.addEventListener('click', async () => {
             currentConversationId = c.id;
             document.getElementById('messages').innerHTML = '';
+            hideEmptyState();
             document.getElementById('chatTitle').textContent = displayTitle;
             closeSidebar();
             document.querySelectorAll('.conversation-item').forEach(e => e.classList.remove('active'));

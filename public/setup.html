@@ -3,56 +3,48 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
   <title>goto-assistant — Setup</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/style.css">
   <script src="/cron-sync.js"></script>
   <script src="/setup.js"></script>
 </head>
 <body>
-  <div class="setup-container">
-    <a href="/" id="backBtn" style="display:none;text-decoration:none;color:#555;font-size:14px">&larr; Home</a>
-    <h1>goto-assistant Setup</h1>
+  <main class="container"><article>
+    <form onsubmit="return false;">
+      <a href="/" id="backBtn" style="display:none;text-decoration:none;font-size:14px">&larr; Home</a>
+      <h1>goto-assistant Setup</h1>
 
-    <div class="form-group">
-      <label>Provider</label>
-      <div class="radio-group">
+      <fieldset>
+        <legend>Provider</legend>
         <label><input type="radio" name="provider" value="claude" checked> Claude</label>
         <label><input type="radio" name="provider" value="openai"> OpenAI</label>
-      </div>
-    </div>
+      </fieldset>
 
-    <div class="form-group">
       <label for="apiKey">API Key</label>
       <input type="password" id="apiKey" placeholder="sk-ant-... or sk-...">
-    </div>
 
-    <div class="form-group">
-      <label for="baseUrl">Base URL <span style="font-weight:400;color:#888">(optional — for LiteLLM proxy)</span></label>
+      <label for="baseUrl">Base URL <small>(optional — for LiteLLM proxy)</small></label>
       <input type="text" id="baseUrl" placeholder="Leave empty for direct API">
-    </div>
 
-    <div class="form-group">
       <label for="model">Model</label>
-      <div class="btn-row">
+      <div role="group">
         <select id="model"><option value="">— Select provider first —</option></select>
-        <button class="btn btn-secondary" id="loadModelsBtn">Load Models</button>
+        <button class="secondary outline" id="loadModelsBtn">Load Models</button>
       </div>
-    </div>
 
-    <div class="form-group">
       <label>MCP Servers</label>
       <div id="mcpServers" class="mcp-servers"></div>
-      <button class="btn btn-secondary" id="addServerBtn">+ Add Server</button>
-    </div>
+      <button class="secondary outline" id="addServerBtn">+ Add Server</button>
 
-    <div class="form-group">
       <label for="port">Server Port</label>
       <input type="number" id="port" value="3000">
-    </div>
 
-    <button class="btn btn-primary" id="saveBtn">Save</button>
+      <button id="saveBtn">Save</button>
+    </form>
     <div id="status"></div>
-  </div>
+  </article></main>
 
   <script>
     let servers = [...defaultServers.map(s => ({ ...s, env: { ...s.env } }))];
