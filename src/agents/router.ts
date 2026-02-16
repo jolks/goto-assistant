@@ -25,15 +25,16 @@ export async function routeMessage(
   onChunk: (text: string) => void,
   resumeSessionId?: string,
   attachments?: Attachment[],
-  history?: HistoryMessage[]
+  history?: HistoryMessage[],
+  systemPromptOverride?: string
 ): Promise<RouteResult> {
   switch (config.provider) {
     case "claude": {
-      const result = await runClaude(prompt, config, mcpServers, onChunk, resumeSessionId, attachments);
+      const result = await runClaude(prompt, config, mcpServers, onChunk, resumeSessionId, attachments, systemPromptOverride);
       return { sessionId: result.sessionId };
     }
     case "openai": {
-      await runOpenAI(prompt, config, mcpServers, onChunk, attachments, history);
+      await runOpenAI(prompt, config, mcpServers, onChunk, attachments, history, systemPromptOverride);
       return { sessionId: null };
     }
     default:

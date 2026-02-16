@@ -14,7 +14,8 @@ export async function runClaude(
   mcpServersConfig: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
   resumeSessionId?: string,
-  attachments?: Attachment[]
+  attachments?: Attachment[],
+  systemPromptOverride?: string
 ): Promise<AgentResponse> {
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
@@ -44,7 +45,7 @@ export async function runClaude(
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     allowedTools: Object.keys(mcpServersConfig).map((name) => `mcp__${name}__*`),
-    systemPrompt: "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
+    systemPrompt: systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
     env,
     maxTurns: 30,
   };

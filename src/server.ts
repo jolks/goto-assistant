@@ -177,6 +177,37 @@ export function createApp(): Express {
   return app;
 }
 
+const SETUP_SYSTEM_PROMPT = `You are helping the user configure their goto-assistant.
+
+There are two config files you can read and modify using your filesystem tools:
+
+**./data/config.json** — Main app config:
+- provider: "claude" or "openai"
+- claude: { apiKey, model, baseUrl }
+- openai: { apiKey, model, baseUrl }
+- server: { port }
+
+**./data/mcp.json** — MCP server config:
+- mcpServers: { name: { command, args (string array), env (optional object) } }
+
+Default MCP servers have been configured:
+- **cron** (mcp-cron): Scheduled task execution
+- **memory** (@modelcontextprotocol/server-memory): Persistent knowledge graph
+- **filesystem** (@modelcontextprotocol/server-filesystem): File system access
+- **time** (mcp-server-time): Current time information
+
+**IMPORTANT — cron server must stay in sync with config.json:**
+The cron server in mcp.json has args that mirror the provider settings in config.json. When the provider, model, API key, or base URL changes, you MUST update both files:
+- \`--ai-provider\`: "anthropic" for claude, "openai" for openai. If baseUrl is set (LiteLLM proxy), always use "openai".
+- \`--ai-model\`: must match the model in config.json for the active provider.
+- \`--ai-base-url\`: add this flag when baseUrl is set, remove it when empty.
+- \`env\` object: the key must be ANTHROPIC_API_KEY for claude, OPENAI_API_KEY for openai, or MCP_CRON_AI_API_KEY when using a base URL proxy. The value must be the API key for the active provider.
+
+When switching providers, ask the user for the new API key if one isn't already saved in config.json for that provider.
+
+Help the user modify their configuration. When done, tell them they can close this chat panel.
+Note: Changes to config.json and mcp.json take effect on the next conversation. Only server port changes require a restart.`;
+
 export function createServer(app: Express) {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
@@ -188,6 +219,7 @@ export function createServer(app: Express) {
         text: string;
         conversationId?: string;
         attachments?: Array<{ fileId: string; filename: string; mimeType: string }>;
+        setupMode?: boolean;
       };
       try {
         msg = JSON.parse(raw.toString());
@@ -266,6 +298,8 @@ export function createServer(app: Express) {
         const allMessages = getMessages(conversationId);
         const history = allMessages.slice(0, -1); // exclude the message we just saved
 
+        const systemPromptOverride = msg.setupMode ? SETUP_SYSTEM_PROMPT : undefined;
+
         let responseText = "";
         const result = await routeMessage(
           msg.text,
@@ -279,7 +313,8 @@ export function createServer(app: Express) {
           },
           resumeSessionId,
           attachments,
-          history
+          history,
+          systemPromptOverride
         );
 
         // Save assistant message
