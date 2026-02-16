@@ -3,6 +3,12 @@ import type { Config, McpServerConfig } from "../config.js";
 import { MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment } from "./router.js";
 
+export interface ClaudeOptions {
+  resumeSessionId?: string;
+  attachments?: Attachment[];
+  systemPromptOverride?: string;
+}
+
 export interface AgentResponse {
   sessionId: string | null;
   conversationId: string;
@@ -13,10 +19,9 @@ export async function runClaude(
   config: Config,
   mcpServersConfig: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
-  resumeSessionId?: string,
-  attachments?: Attachment[],
-  systemPromptOverride?: string
+  options?: ClaudeOptions
 ): Promise<AgentResponse> {
+  const { resumeSessionId, attachments, systemPromptOverride } = options ?? {};
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     ANTHROPIC_API_KEY: config.claude.apiKey,
@@ -39,7 +44,7 @@ export async function runClaude(
     };
   }
 
-  const options: Record<string, unknown> = {
+  const queryOptions: Record<string, unknown> = {
     model: config.claude.model,
     mcpServers,
     permissionMode: "bypassPermissions",
@@ -51,7 +56,7 @@ export async function runClaude(
   };
 
   if (resumeSessionId) {
-    options.resume = resumeSessionId;
+    queryOptions.resume = resumeSessionId;
   }
 
   // When attachments are present, reference file paths in the prompt so Claude
@@ -69,7 +74,7 @@ export async function runClaude(
 
   let sessionId: string | null = null;
 
-  const result = query({ prompt: queryPrompt, options });
+  const result = query({ prompt: queryPrompt, options: queryOptions });
 
   for await (const message of result) {
     if (message.type === "system" && message.subtype === "init") {

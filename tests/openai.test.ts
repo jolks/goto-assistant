@@ -60,7 +60,7 @@ describe("openai input construction", () => {
       { role: "user", content: "previous question" },
       { role: "assistant", content: "previous answer" },
     ];
-    await runOpenAI("follow up", config, mcpServers, vi.fn(), undefined, history);
+    await runOpenAI("follow up", config, mcpServers, vi.fn(), { history });
 
     expect(Array.isArray(capturedInput)).toBe(true);
     const messages = capturedInput as Array<Record<string, unknown>>;
@@ -76,7 +76,7 @@ describe("openai input construction", () => {
       mimeType: "image/png",
       data: Buffer.from("fake-image"),
     }];
-    await runOpenAI("describe this", config, mcpServers, vi.fn(), attachments);
+    await runOpenAI("describe this", config, mcpServers, vi.fn(), { attachments });
 
     expect(Array.isArray(capturedInput)).toBe(true);
     const messages = capturedInput as Array<Record<string, unknown>>;
@@ -100,7 +100,7 @@ describe("openai input construction", () => {
       mimeType: "image/jpeg",
       data: Buffer.from("jpeg-data"),
     }];
-    await runOpenAI("what is this?", config, mcpServers, vi.fn(), attachments, history);
+    await runOpenAI("what is this?", config, mcpServers, vi.fn(), { attachments, history });
 
     const messages = capturedInput as Array<Record<string, unknown>>;
     expect(messages).toHaveLength(3);
@@ -117,7 +117,7 @@ describe("openai input construction", () => {
       { role: "user", content: JSON.stringify({ text: "look at this", attachments: [{ fileId: "abc", filename: "img.png", mimeType: "image/png" }] }) },
       { role: "assistant", content: "I see an image" },
     ];
-    await runOpenAI("and this?", config, mcpServers, vi.fn(), undefined, history);
+    await runOpenAI("and this?", config, mcpServers, vi.fn(), { history });
 
     const messages = capturedInput as Array<Record<string, unknown>>;
     // User message should have image + text content blocks

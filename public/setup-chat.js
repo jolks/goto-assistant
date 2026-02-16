@@ -19,7 +19,7 @@ function addMessage(role, text) {
   var container = document.getElementById('chatMessages');
   var div = document.createElement('div');
   div.className = 'message ' + role;
-  if (typeof marked !== 'undefined' && marked.parse) {
+  if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
     div.innerHTML = DOMPurify.sanitize(marked.parse(text));
   } else {
     div.textContent = text;
@@ -50,60 +50,41 @@ function showChoices(options, onSelect) {
 function setInputMode(mode) {
   var textarea = document.getElementById('chatInput');
   var sendBtn = document.getElementById('chatSendBtn');
-  if (mode === 'disabled') {
-    textarea.disabled = true;
-    sendBtn.disabled = true;
-    textarea.placeholder = '';
-  } else if (mode === 'password') {
-    textarea.disabled = false;
-    sendBtn.disabled = false;
-    textarea.placeholder = 'Enter your API key...';
-    textarea.focus();
-  } else if (mode === 'text') {
-    textarea.disabled = false;
-    sendBtn.disabled = false;
-    textarea.placeholder = 'Send a message...';
-    textarea.focus();
-  } else if (mode === 'optional') {
-    textarea.disabled = false;
-    sendBtn.disabled = false;
-    textarea.placeholder = 'Press Enter to skip, or enter a URL...';
-    textarea.focus();
-  }
+  var placeholders = {
+    disabled: '', password: 'Enter your API key...',
+    text: 'Send a message...', optional: 'Press Enter to skip, or enter a URL...',
+  };
+  textarea.disabled = mode === 'disabled';
+  sendBtn.disabled = mode === 'disabled';
+  textarea.placeholder = placeholders[mode] || '';
+  if (mode !== 'disabled') textarea.focus();
 }
 
-// Build default MCP servers object using buildCronConfig from cron-sync.js
+// Build default MCP servers object using defaultServers from setup.js and buildCronConfig from cron-sync.js
 function buildDefaultMcpServers(provider, apiKey, model, baseUrl) {
-  var cronArgs = DEFAULT_CRON_ARGS;
-  var cronResult = buildCronConfig({
-    provider: provider,
-    apiKey: apiKey,
-    model: model,
-    baseUrl: baseUrl,
-    currentArgs: cronArgs,
-  });
-
   var servers = {};
-  servers.cron = {
-    command: 'npx',
-    args: cronResult.args.split(/\s+/).filter(Boolean),
-    env: {},
-  };
-  servers.cron.env[cronResult.envKey] = cronResult.envValue;
-
-  servers.memory = {
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-memory'],
-  };
-  servers.filesystem = {
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
-  };
-  servers.time = {
-    command: 'uvx',
-    args: ['mcp-server-time'],
-  };
-
+  defaultServers.forEach(function (s) {
+    if (s.name === 'cron') {
+      var cronResult = buildCronConfig({
+        provider: provider,
+        apiKey: apiKey,
+        model: model,
+        baseUrl: baseUrl,
+        currentArgs: s.args,
+      });
+      servers[s.name] = {
+        command: s.command,
+        args: cronResult.args.split(/\s+/).filter(Boolean),
+        env: {},
+      };
+      servers[s.name].env[cronResult.envKey] = cronResult.envValue;
+    } else {
+      servers[s.name] = {
+        command: s.command,
+        args: s.args.split(/\s+/).filter(Boolean),
+      };
+    }
+  });
   return servers;
 }
 
@@ -168,7 +149,7 @@ function connectAiChat() {
       if (!setupChatState.streamingEl) {
         setupChatState.streamingEl = addMessage('assistant', '');
       }
-      if (typeof marked !== 'undefined' && marked.parse) {
+      if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
         setupChatState.streamingEl.innerHTML = DOMPurify.sanitize(marked.parse(setupChatState.streamingText));
       } else {
         setupChatState.streamingEl.textContent = setupChatState.streamingText;
@@ -198,6 +179,16 @@ function connectAiChat() {
 
   ws.addEventListener('close', function () {
     setupChatState.ws = null;
+    if (setupChatState.current === 'ai_chat') {
+      addMessage('assistant', 'Reconnecting...');
+      setTimeout(function () {
+        var indicator = document.querySelector('#chatMessages .message.assistant:last-child');
+        if (indicator && indicator.textContent === 'Reconnecting...') {
+          indicator.remove();
+        }
+        connectAiChat();
+      }, 2000);
+    }
   });
 
   return ws;
@@ -319,8 +310,16 @@ function handleModelSelect(modelId) {
     setInputMode('text');
     connectAiChat();
   }).catch(function (err) {
-    addMessage('assistant', 'Failed to save: ' + err.message);
-    setInputMode('text');
+    addMessage('assistant', 'Failed to save: ' + err.message + '\n\nPlease select a model to try again:');
+    setupChatState.current = 'model';
+    // Re-show model choices from the existing <select> options
+    var select = document.getElementById('model');
+    var options = Array.from(select.options).filter(function (o) { return o.value; });
+    showChoices(options.map(function (o) {
+      return { label: o.textContent, value: o.value };
+    }), function (modelId) {
+      handleModelSelect(modelId);
+    });
   });
 }
 

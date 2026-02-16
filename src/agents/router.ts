@@ -14,6 +14,13 @@ export interface HistoryMessage {
   content: string;
 }
 
+export interface RouteOptions {
+  resumeSessionId?: string;
+  attachments?: Attachment[];
+  history?: HistoryMessage[];
+  systemPromptOverride?: string;
+}
+
 export interface RouteResult {
   sessionId: string | null;
 }
@@ -23,18 +30,16 @@ export async function routeMessage(
   config: Config,
   mcpServers: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
-  resumeSessionId?: string,
-  attachments?: Attachment[],
-  history?: HistoryMessage[],
-  systemPromptOverride?: string
+  options?: RouteOptions
 ): Promise<RouteResult> {
+  const { resumeSessionId, attachments, history, systemPromptOverride } = options || {};
   switch (config.provider) {
     case "claude": {
-      const result = await runClaude(prompt, config, mcpServers, onChunk, resumeSessionId, attachments, systemPromptOverride);
+      const result = await runClaude(prompt, config, mcpServers, onChunk, { resumeSessionId, attachments, systemPromptOverride });
       return { sessionId: result.sessionId };
     }
     case "openai": {
-      await runOpenAI(prompt, config, mcpServers, onChunk, attachments, history, systemPromptOverride);
+      await runOpenAI(prompt, config, mcpServers, onChunk, { attachments, history, systemPromptOverride });
       return { sessionId: null };
     }
     default:

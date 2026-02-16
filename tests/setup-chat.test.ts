@@ -1,8 +1,19 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { buildCronConfig, escapeHtml, DEFAULT_CRON_ARGS } from "../public/cron-sync.js";
+
+// setup.js references DEFAULT_CRON_ARGS and escapeHtml as globals (set by cron-sync.js <script> in the browser).
+// vi.hoisted runs before imports are evaluated, so setup.js can find them during module init.
+vi.hoisted(() => {
+  (globalThis as Record<string, unknown>).DEFAULT_CRON_ARGS = '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929';
+  (globalThis as Record<string, unknown>).escapeHtml = function (str: string) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+});
+
+import { buildCronConfig } from "../public/cron-sync.js";
 import {
+  defaultServers,
   renderServers,
   readServers,
   syncCronConfig,
@@ -13,8 +24,7 @@ import {
 // In the browser, <script> var declarations become window globals.
 // Replicate this for the test environment so setup-chat.js can find them.
 (globalThis as Record<string, unknown>).buildCronConfig = buildCronConfig;
-(globalThis as Record<string, unknown>).escapeHtml = escapeHtml;
-(globalThis as Record<string, unknown>).DEFAULT_CRON_ARGS = DEFAULT_CRON_ARGS;
+(globalThis as Record<string, unknown>).defaultServers = defaultServers;
 (globalThis as Record<string, unknown>).readServers = readServers;
 (globalThis as Record<string, unknown>).renderServers = renderServers;
 (globalThis as Record<string, unknown>).syncCronConfig = syncCronConfig;
@@ -28,6 +38,7 @@ import {
   setInputMode,
   buildDefaultMcpServers,
   handleInput,
+  handleModelSelect,
   initSetupChat,
   syncCronFromChat,
 } from "../public/setup-chat.js";
@@ -445,6 +456,37 @@ describe("setup-chat", () => {
     it("does not throw when global functions are not available", () => {
       // syncCronFromChat guards against missing globals
       expect(() => syncCronFromChat()).not.toThrow();
+    });
+  });
+
+  describe("handleModelSelect error recovery (Fix 11)", () => {
+    it("resets state to model and shows choices on save failure", async () => {
+      // Set up state as if we've gone through provider + api_key + base_url
+      setupChatState.current = "model";
+      setupChatState.provider = "claude";
+      setupChatState.apiKey = "sk-test";
+      setupChatState.baseUrl = "";
+      // Populate model <select> with options
+      const select = document.getElementById("model") as HTMLSelectElement;
+      select.innerHTML =
+        '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>' +
+        '<option value="claude-opus-4-6">Claude Opus 4.6</option>';
+
+      // Mock fetch to fail on save
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({ error: "Server error" }),
+      });
+
+      handleModelSelect("claude-sonnet-4-5-20250929");
+
+      // Wait for the async .catch to execute
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(setupChatState.current).toBe("model");
+      // Should show choice buttons to retry
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      expect(choices.length).toBeGreaterThanOrEqual(1);
     });
   });
 });

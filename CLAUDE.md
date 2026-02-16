@@ -65,7 +65,7 @@ git tag v<version> && git push origin v<version>
 
 **Data flow**: Browser → WebSocket → `server.ts` → `router.ts` → provider agent → streamed response chunks back via WebSocket. The setup chat sends `setupMode: true` which injects `SETUP_SYSTEM_PROMPT` (defined in `server.ts`) as a `systemPromptOverride`, threaded through `routeMessage` → `runClaude`/`runOpenAI`. This prompt instructs the AI about config file structure and cron sync rules.
 
-**Persistence**: `src/sessions.ts` — SQLite (better-sqlite3, WAL mode) stores conversation metadata and messages in `data/sessions.db`. Claude uses `sdk_session_id` for resumption; OpenAI replays history from the messages table.
+**Persistence**: `src/sessions.ts` — SQLite (better-sqlite3, WAL mode) stores conversation metadata and messages in `data/sessions.db`. Claude uses `sdk_session_id` for resumption; OpenAI replays history from the messages table. Setup chat conversations are stored with `setup = 1` and filtered from `listConversations()` so they don't appear in the sidebar.
 
 **Uploads**: `src/uploads.ts` — images stored in `data/uploads/{uuid}/{filename}`. Message content with attachments is stored as JSON in the messages table (`parseMessageContent()` handles both plain text and JSON formats).
 

@@ -113,6 +113,16 @@ describe("sessions", () => {
     expect(messages).toEqual([]);
   });
 
+  it("hides setup conversations from listConversations", () => {
+    createConversation("claude", true);
+    createConversation("claude");
+
+    const list = listConversations();
+    expect(list).toHaveLength(1);
+    // The non-setup conversation should be returned
+    expect(list[0].provider).toBe("claude");
+  });
+
   it("deletes a conversation and its messages", () => {
     const conv = createConversation("claude");
     saveMessage(conv.id, "user", "Hello");

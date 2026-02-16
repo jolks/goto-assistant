@@ -254,7 +254,7 @@ export function createServer(app: Express) {
       }
 
       if (!conversationId) {
-        const conv = createConversation(config.provider);
+        const conv = createConversation(config.provider, !!msg.setupMode);
         conversationId = conv.id;
         isNewConversation = true;
       }
@@ -311,10 +311,7 @@ export function createServer(app: Express) {
               ws.send(JSON.stringify({ type: "chunk", text: chunk }));
             }
           },
-          resumeSessionId,
-          attachments,
-          history,
-          systemPromptOverride
+          { resumeSessionId, attachments, history, systemPromptOverride }
         );
 
         // Save assistant message

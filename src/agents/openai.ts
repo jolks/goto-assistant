@@ -39,15 +39,20 @@ class LocalShell implements Shell {
   }
 }
 
+export interface OpenAIOptions {
+  attachments?: Attachment[];
+  history?: HistoryMessage[];
+  systemPromptOverride?: string;
+}
+
 export async function runOpenAI(
   prompt: string,
   config: Config,
   mcpServersConfig: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
-  attachments?: Attachment[],
-  history?: HistoryMessage[],
-  systemPromptOverride?: string
+  options?: OpenAIOptions
 ): Promise<void> {
+  const { attachments, history, systemPromptOverride } = options || {};
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     OPENAI_API_KEY: config.openai.apiKey,

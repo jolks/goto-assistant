@@ -7,7 +7,8 @@
 /* Reset: Pico turns all <button> into styled buttons; undo for utility buttons */
 .btn-icon, .settings-btn, .hamburger-btn,
 .file-upload-btn, .file-preview-remove,
-.conversation-item .delete-btn {
+.conversation-item .delete-btn,
+.setup-chat-close {
   background: none; border: none; box-shadow: none;
   color: inherit; width: auto; margin-bottom: 0;
 }
@@ -106,12 +107,15 @@ body {
   padding: 16px 20px; border-top: 1px solid var(--pico-muted-border-color); background: var(--pico-card-background-color);
 }
 .input-row { display: flex; gap: 8px; max-width: 720px; margin: 0 auto; }
-.input-row textarea {
+.input-row textarea,
+.setup-chat-input-row textarea {
   flex: 1; padding: 10px 14px; border: 1px solid var(--pico-muted-border-color); border-radius: 10px;
-  font-size: 14px; resize: none; font-family: inherit; min-height: 44px; max-height: 200px;
+  resize: none; font-family: inherit; min-height: 44px; max-height: 200px;
   background: var(--pico-background-color); color: var(--pico-color);
 }
-.input-row textarea:focus { outline: none; border-color: var(--pico-primary); }
+.input-row textarea { font-size: 14px; }
+.input-row textarea:focus,
+.setup-chat-input-row textarea:focus { outline: none; border-color: var(--pico-primary); }
 
 .typing-indicator { font-style: italic; color: var(--pico-muted-color); padding: 8px 16px; }
 
@@ -197,7 +201,7 @@ body {
 /* ===== Setup Chat Layout ===== */
 
 /* Side-by-side on desktop */
-.setup-layout { display: flex; height: 100dvh; }
+.setup-layout { display: flex; height: 100vh; height: 100dvh; }
 .setup-form { flex: 1; overflow-y: auto; }
 .setup-form .container { max-width: 640px; }
 
@@ -214,20 +218,15 @@ body {
 }
 .setup-chat-header h3 { margin: 0; font-size: 15px; }
 .setup-chat-close {
-  background: none; border: none; font-size: 20px; cursor: pointer;
-  color: var(--pico-muted-color); padding: 4px 8px; margin-bottom: 0; width: auto;
+  font-size: 20px; cursor: pointer;
+  color: var(--pico-muted-color); padding: 4px 8px;
 }
 .setup-chat-messages { flex: 1; overflow-y: auto; padding: 16px; }
 .setup-chat-messages .message { max-width: 100%; font-size: 14px; }
 .setup-chat-messages .message.user { max-width: 85%; }
 .setup-chat-input { padding: 12px; border-top: 1px solid var(--pico-muted-border-color); }
 .setup-chat-input-row { display: flex; gap: 8px; }
-.setup-chat-input-row textarea {
-  flex: 1; padding: 10px 14px; border: 1px solid var(--pico-muted-border-color); border-radius: 10px;
-  font-size: 16px; resize: none; font-family: inherit; min-height: 44px; max-height: 200px;
-  background: var(--pico-background-color); color: var(--pico-color); width: auto; margin-bottom: 0;
-}
-.setup-chat-input-row textarea:focus { outline: none; border-color: var(--pico-primary); }
+.setup-chat-input-row textarea { font-size: 16px; width: auto; margin-bottom: 0; }
 .setup-chat-input-row button { flex-shrink: 0; margin-bottom: 0; }
 
 /* Choice buttons for Q&A */

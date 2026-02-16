@@ -29,7 +29,7 @@ describe("router", () => {
     const onChunk = vi.fn();
     const result = await routeMessage("hello", config, mcpServers, onChunk);
 
-    expect(runClaude).toHaveBeenCalledWith("hello", config, mcpServers, onChunk, undefined, undefined, undefined);
+    expect(runClaude).toHaveBeenCalledWith("hello", config, mcpServers, onChunk, { resumeSessionId: undefined, attachments: undefined, systemPromptOverride: undefined });
     expect(result.sessionId).toBe("claude-session-1");
   });
 
@@ -38,7 +38,7 @@ describe("router", () => {
     const onChunk = vi.fn();
     const result = await routeMessage("hello", config, mcpServers, onChunk);
 
-    expect(runOpenAI).toHaveBeenCalledWith("hello", config, mcpServers, onChunk, undefined, undefined, undefined);
+    expect(runOpenAI).toHaveBeenCalledWith("hello", config, mcpServers, onChunk, { attachments: undefined, history: undefined, systemPromptOverride: undefined });
     expect(result.sessionId).toBeNull();
   });
 

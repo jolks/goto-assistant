@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { buildCronConfig, escapeHtml } from "../public/cron-sync.js";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// setup.js references DEFAULT_CRON_ARGS and escapeHtml as globals (set by cron-sync.js <script> in the browser).
+// vi.hoisted runs before imports are evaluated, so setup.js can find them during module init.
+vi.hoisted(() => {
+  (globalThis as Record<string, unknown>).DEFAULT_CRON_ARGS = '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929';
+  (globalThis as Record<string, unknown>).escapeHtml = function (str: string) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+});
+
+import { buildCronConfig } from "../public/cron-sync.js";
 import {
   defaultServers,
   getProvider,
@@ -10,10 +20,6 @@ import {
   syncCronConfig,
   handleProviderSwitch,
 } from "../public/setup.js";
-
-// In the browser, cron-sync.js var declarations become window globals.
-// Replicate this for the test environment so setup.js can find them.
-(globalThis as Record<string, unknown>).escapeHtml = escapeHtml;
 
 interface Server {
   name: string;
@@ -99,6 +105,23 @@ describe("setup page", () => {
       expect(result).toHaveLength(2);
       expect(result[0].env).toEqual({ X: "1" });
       expect(result[1].env).toEqual({ Y: "2", Z: "3" });
+    });
+
+    it("escapes HTML special characters in server fields (XSS prevention)", () => {
+      const servers: Server[] = [
+        { name: '<img onerror="alert(1)">', command: 'node">', args: '--flag <script>', env: { '<key>': '<val>' } },
+      ];
+      renderServers(servers);
+      const container = document.getElementById("mcpServers")!;
+      // No injected elements — escapeHtml prevents XSS
+      expect(container.querySelectorAll("script")).toHaveLength(0);
+      expect(container.querySelectorAll("img")).toHaveLength(0);
+      // DOM .value auto-unescapes, so readServers should return the original values
+      const result = readServers();
+      expect(result[0].name).toBe('<img onerror="alert(1)">');
+      expect(result[0].command).toBe('node">');
+      expect(result[0].args).toBe('--flag <script>');
+      expect(result[0].env['<key>']).toBe('<val>');
     });
 
     it("roundtrips defaultServers", () => {

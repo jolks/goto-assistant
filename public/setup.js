@@ -2,7 +2,7 @@
 // Loaded as a plain <script> in the browser; importable via require() in tests.
 
 var defaultServers = [
-  { name: 'cron', command: 'npx', args: '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929', env: {} },
+  { name: 'cron', command: 'npx', args: DEFAULT_CRON_ARGS, env: {} },
   { name: 'memory', command: 'npx', args: '-y @modelcontextprotocol/server-memory', env: {} },
   { name: 'filesystem', command: 'npx', args: '-y @modelcontextprotocol/server-filesystem .', env: {} },
   { name: 'time', command: 'uvx', args: 'mcp-server-time', env: {} },
@@ -21,20 +21,20 @@ function renderServers(servers) {
     var envRows = Object.entries(s.env || {}).map(function (_ref, ei) {
       var k = _ref[0], v = _ref[1];
       return '<div class="env-row">' +
-        '<input type="text" placeholder="Key" value="' + k + '" data-server="' + i + '" data-env-key="' + ei + '">' +
-        '<input type="text" placeholder="Value" value="' + v + '" data-server="' + i + '" data-env-val="' + ei + '">' +
+        '<input type="text" placeholder="Key" value="' + escapeHtml(k) + '" data-server="' + i + '" data-env-key="' + ei + '">' +
+        '<input type="text" placeholder="Value" value="' + escapeHtml(v) + '" data-server="' + i + '" data-env-val="' + ei + '">' +
         '<button class="btn-icon" onclick="removeEnv(' + i + ',' + ei + ')">×</button>' +
         '</div>';
     }).join('');
     div.innerHTML =
       '<header class="mcp-server-header">' +
-        '<input type="text" value="' + s.name + '" data-server="' + i + '" data-field="name" placeholder="Server name">' +
+        '<input type="text" value="' + escapeHtml(s.name) + '" data-server="' + i + '" data-field="name" placeholder="Server name">' +
         '<button class="btn-icon" onclick="removeServer(' + i + ')">×</button>' +
       '</header>' +
       '<label>Command</label>' +
-      '<input type="text" value="' + s.command + '" data-server="' + i + '" data-field="command">' +
+      '<input type="text" value="' + escapeHtml(s.command) + '" data-server="' + i + '" data-field="command">' +
       '<label>Args</label>' +
-      '<input type="text" value="' + s.args + '" data-server="' + i + '" data-field="args">' +
+      '<input type="text" value="' + escapeHtml(s.args) + '" data-server="' + i + '" data-field="args">' +
       '<label>Environment Variables</label>' +
       envRows +
       '<button class="secondary outline" style="margin-top:4px;font-size:12px;padding:4px 10px" onclick="addEnv(' + i + ')">+ Add Env</button>';
