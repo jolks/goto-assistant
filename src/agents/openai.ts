@@ -39,14 +39,20 @@ class LocalShell implements Shell {
   }
 }
 
+export interface OpenAIOptions {
+  attachments?: Attachment[];
+  history?: HistoryMessage[];
+  systemPromptOverride?: string;
+}
+
 export async function runOpenAI(
   prompt: string,
   config: Config,
   mcpServersConfig: Record<string, McpServerConfig>,
   onChunk: (text: string) => void,
-  attachments?: Attachment[],
-  history?: HistoryMessage[]
+  options?: OpenAIOptions
 ): Promise<void> {
+  const { attachments, history, systemPromptOverride } = options || {};
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     OPENAI_API_KEY: config.openai.apiKey,
@@ -80,7 +86,7 @@ export async function runOpenAI(
     const agent = new Agent({
       name: "goto-assistant",
       instructions:
-        "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. You also have a shell tool to execute commands on the host machine. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
+        systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. You also have a shell tool to execute commands on the host machine. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
       model: config.openai.model,
       mcpServers,
       tools: [

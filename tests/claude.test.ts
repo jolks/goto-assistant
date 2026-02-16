@@ -41,7 +41,7 @@ describe("claude prompt construction", () => {
       data: Buffer.from("fake"),
       filePath: "/data/uploads/abc/test.png",
     }];
-    await runClaude("describe this", config, mcpServers, vi.fn(), undefined, attachments);
+    await runClaude("describe this", config, mcpServers, vi.fn(), { attachments });
 
     // Must be a string, not an AsyncIterable — the SDK only accepts strings
     expect(typeof capturedPrompt).toBe("string");
@@ -54,7 +54,7 @@ describe("claude prompt construction", () => {
       data: Buffer.from("fake"),
       filePath: "/data/uploads/uuid1/photo.jpg",
     }];
-    await runClaude("what is this?", config, mcpServers, vi.fn(), undefined, attachments);
+    await runClaude("what is this?", config, mcpServers, vi.fn(), { attachments });
 
     const prompt = capturedPrompt as string;
     expect(prompt).toContain("what is this?");
@@ -67,7 +67,7 @@ describe("claude prompt construction", () => {
       { filename: "a.png", mimeType: "image/png", data: Buffer.from("a"), filePath: "/uploads/id1/a.png" },
       { filename: "b.jpg", mimeType: "image/jpeg", data: Buffer.from("b"), filePath: "/uploads/id2/b.jpg" },
     ];
-    await runClaude("compare these", config, mcpServers, vi.fn(), undefined, attachments);
+    await runClaude("compare these", config, mcpServers, vi.fn(), { attachments });
 
     const prompt = capturedPrompt as string;
     expect(prompt).toContain("compare these");

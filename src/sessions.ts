@@ -37,13 +37,19 @@ export function getDb(): Database.Database {
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
-      provider TEXT NOT NULL,
+      provider TEXT NOT NULL, -- provider at creation time; may differ from later messages if user switches provider mid-conversation
       sdk_session_id TEXT,
       title TEXT,
+      setup INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+  // Migration: add setup column to existing tables
+  const cols = db.pragma("table_info(conversations)") as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "setup")) {
+    db.exec("ALTER TABLE conversations ADD COLUMN setup INTEGER NOT NULL DEFAULT 0");
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,14 +63,14 @@ export function getDb(): Database.Database {
   return db;
 }
 
-export function createConversation(provider: string): Conversation {
+export function createConversation(provider: string, setup?: boolean): Conversation {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   getDb()
     .prepare(
-      "INSERT INTO conversations (id, provider, created_at, updated_at) VALUES (?, ?, ?, ?)"
+      "INSERT INTO conversations (id, provider, setup, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
     )
-    .run(id, provider, now, now);
+    .run(id, provider, setup ? 1 : 0, now, now);
   return { id, provider, sdk_session_id: null, title: null, created_at: now, updated_at: now };
 }
 
@@ -92,7 +98,7 @@ export function updateTitle(conversationId: string, title: string): void {
 
 export function listConversations(): Conversation[] {
   return getDb()
-    .prepare("SELECT * FROM conversations ORDER BY updated_at DESC")
+    .prepare("SELECT * FROM conversations WHERE setup = 0 ORDER BY updated_at DESC")
     .all() as Conversation[];
 }
 

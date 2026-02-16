@@ -7,44 +7,70 @@
   <title>goto-assistant — Setup</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <script src="/cron-sync.js"></script>
   <script src="/setup.js"></script>
+  <script src="/setup-chat.js"></script>
 </head>
 <body>
-  <main class="container"><article>
-    <form onsubmit="return false;">
-      <a href="/" id="backBtn" style="display:none;text-decoration:none;font-size:14px">&larr; Home</a>
-      <h1>goto-assistant Setup</h1>
+  <div class="setup-layout">
+    <!-- Left: existing form -->
+    <div class="setup-form">
+      <main class="container"><article>
+        <form onsubmit="return false;">
+          <a href="/" id="backBtn" style="display:none;text-decoration:none;font-size:14px">&larr; Home</a>
+          <h1>goto-assistant Setup</h1>
+          <button class="outline chat-open-btn" id="chatOpenBtn">Ask for Setup Wizard help!</button>
 
-      <fieldset>
-        <legend>Provider</legend>
-        <label><input type="radio" name="provider" value="claude" checked> Claude</label>
-        <label><input type="radio" name="provider" value="openai"> OpenAI</label>
-      </fieldset>
+          <fieldset>
+            <legend>Provider</legend>
+            <label><input type="radio" name="provider" value="claude" checked> Claude</label>
+            <label><input type="radio" name="provider" value="openai"> OpenAI</label>
+          </fieldset>
 
-      <label for="apiKey">API Key</label>
-      <input type="password" id="apiKey" placeholder="sk-ant-... or sk-...">
+          <label for="apiKey">API Key</label>
+          <input type="password" id="apiKey" placeholder="sk-ant-... or sk-...">
 
-      <label for="baseUrl">Base URL <small>(optional — for LiteLLM proxy)</small></label>
-      <input type="text" id="baseUrl" placeholder="Leave empty for direct API">
+          <label for="baseUrl">Base URL <small>(optional — for LiteLLM proxy)</small></label>
+          <input type="text" id="baseUrl" placeholder="Leave empty for direct API">
 
-      <label for="model">Model</label>
-      <div role="group">
-        <select id="model"><option value="">— Select provider first —</option></select>
-        <button class="secondary outline" id="loadModelsBtn">Load Models</button>
+          <label for="model">Model</label>
+          <div role="group">
+            <select id="model"><option value="">— Select provider first —</option></select>
+            <button class="secondary outline" id="loadModelsBtn">Load Models</button>
+          </div>
+
+          <label>MCP Servers</label>
+          <div id="mcpServers" class="mcp-servers"></div>
+          <button class="secondary outline" id="addServerBtn">+ Add Server</button>
+
+          <label for="port">Server Port</label>
+          <input type="number" id="port" value="3000">
+
+          <button id="saveBtn">Save</button>
+        </form>
+        <div id="status"></div>
+      </article></main>
+    </div>
+
+    <!-- Right: chat panel -->
+    <div class="setup-chat" id="setupChat">
+      <div class="setup-chat-header">
+        <h3>Setup Assistant</h3>
+        <button class="setup-chat-close" id="chatCloseBtn">&times;</button>
       </div>
+      <div class="setup-chat-messages" id="chatMessages"></div>
+      <div class="setup-chat-input">
+        <div id="chatChoices"></div>
+        <div class="setup-chat-input-row">
+          <textarea id="chatInput" rows="1" placeholder="Send a message..."></textarea>
+          <button id="chatSendBtn">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-      <label>MCP Servers</label>
-      <div id="mcpServers" class="mcp-servers"></div>
-      <button class="secondary outline" id="addServerBtn">+ Add Server</button>
-
-      <label for="port">Server Port</label>
-      <input type="number" id="port" value="3000">
-
-      <button id="saveBtn">Save</button>
-    </form>
-    <div id="status"></div>
-  </article></main>
 
   <script>
     let servers = [...defaultServers.map(s => ({ ...s, env: { ...s.env } }))];
@@ -76,7 +102,6 @@
       servers = syncCronConfig(servers, isEditing, buildCronConfig, window._savedConfig);
       renderServers(servers);
     }
-
     // Sync cron when provider, API key, base URL, or model changes
     document.querySelectorAll('input[name="provider"]').forEach(radio => {
       radio.addEventListener('change', () => {
@@ -107,7 +132,7 @@
         const data = await res.json();
         if (!res.ok) { showStatus(data.error, 'error'); return; }
         select.innerHTML = data.models.map(m =>
-          `<option value="${m.id}">${m.name}</option>`
+          `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`
         ).join('');
         showStatus('Models loaded', 'success');
       } catch (e) {
@@ -178,8 +203,9 @@
       el.textContent = msg;
     }
 
-    // Pre-fill if editing existing config
-    (async () => {
+    // refreshForm: re-fetch config and MCP servers from API, update all form fields.
+    // Called by setup-chat.js after saving config or after AI chat responses.
+    window.refreshForm = async function refreshForm() {
       try {
         const [configRes, mcpRes] = await Promise.all([
           fetch('/api/config'),
@@ -195,15 +221,14 @@
           const c = data.config;
           document.querySelector(`input[name="provider"][value="${c.provider}"]`).checked = true;
           document.getElementById('port').value = c.server.port;
-          // Don't pre-fill masked API key
-          if (c[c.provider]?.baseUrl) document.getElementById('baseUrl').value = c[c.provider].baseUrl;
-          // Pre-fill model as a single option so user sees current selection
+          if (c[c.provider]?.baseUrl) {
+            document.getElementById('baseUrl').value = c[c.provider].baseUrl;
+          }
           if (c[c.provider]?.model) {
             const select = document.getElementById('model');
-            select.innerHTML = `<option value="${c[c.provider].model}">${c[c.provider].model}</option>`;
+            select.innerHTML = `<option value="${escapeHtml(c[c.provider].model)}">${escapeHtml(c[c.provider].model)}</option>`;
           }
         }
-        // Load MCP servers from dedicated endpoint
         if (mcpData.mcpServers && Object.keys(mcpData.mcpServers).length > 0) {
           servers = Object.entries(mcpData.mcpServers).map(([name, s]) => ({
             name, command: s.command, args: s.args.join(' '), env: s.env || {},
@@ -211,7 +236,25 @@
           renderServers(servers);
         }
       } catch {}
+    };
+
+    // Pre-fill form from existing config, then initialize chat panel
+    (async () => {
+      await window.refreshForm();
+      initSetupChat({ isEditing, config: window._savedConfig || null });
     })();
+
+    // Chat toggle
+    document.getElementById('chatOpenBtn').addEventListener('click', () => {
+      const chat = document.getElementById('setupChat');
+      chat.classList.add('open');
+      chat.classList.remove('closed');
+    });
+    document.getElementById('chatCloseBtn').addEventListener('click', () => {
+      const chat = document.getElementById('setupChat');
+      chat.classList.remove('open');
+      chat.classList.add('closed');
+    });
   </script>
 </body>
 </html>

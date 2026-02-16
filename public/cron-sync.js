@@ -1,10 +1,17 @@
+// Default cron args shared between setup.js and setup-chat.js.
+var DEFAULT_CRON_ARGS = '-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929';
+
+// Escape HTML special characters for safe insertion into HTML templates.
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // buildCronConfig — derive mcp-cron args and env from the user's AI settings.
 //
 // Core rule: if baseUrl is set (LiteLLM proxy), cron always uses
 // --ai-provider openai + MCP_CRON_AI_API_KEY, because mcp-cron's Anthropic
 // provider does not support --ai-base-url.
 
-// eslint-disable-next-line no-unused-vars
 function buildCronConfig({ provider, apiKey, model, baseUrl, currentArgs }) {
   const useProxy = Boolean(baseUrl);
   const aiProvider = useProxy ? 'openai' : (provider === 'claude' ? 'anthropic' : 'openai');
@@ -46,5 +53,5 @@ function buildCronConfig({ provider, apiKey, model, baseUrl, currentArgs }) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { buildCronConfig };
+  module.exports = { buildCronConfig, escapeHtml, DEFAULT_CRON_ARGS };
 }
