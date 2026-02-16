@@ -39,6 +39,7 @@ body {
 .env-row { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
 .env-row input { flex: 1; }
 .btn-icon { border: 1px solid var(--pico-muted-border-color); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 16px; }
+.mcp-server-header .btn-icon:hover, .env-row .btn-icon:hover { color: #c00; background: #fee; border-color: #fcc; }
 
 /* Chat page */
 .chat-layout { display: flex; height: 100vh; height: 100dvh; }
@@ -190,7 +191,7 @@ body {
 @media (prefers-color-scheme: dark) {
   .status-msg.error { background: #3a1a1a; color: #f88; }
   .status-msg.success { background: #1a3a1a; color: #8f8; }
-  .conversation-item .delete-btn:hover { color: #f88; background: #3a1a1a; border-color: #522; }
+  .conversation-item .delete-btn:hover, .mcp-server-header .btn-icon:hover, .env-row .btn-icon:hover { color: #f88; background: #3a1a1a; border-color: #522; }
 }
 
 /* ===== Setup Chat Layout ===== */
