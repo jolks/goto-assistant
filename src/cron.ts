@@ -1,0 +1,118 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { loadMcpServers } from "./config.js";
+
+let cronProc: ChildProcess | null = null;
+
+/**
+ * Send a JSON-RPC message to an MCP server over stdio.
+ */
+function send(proc: ChildProcess, message: Record<string, unknown>): void {
+  proc.stdin!.write(JSON.stringify(message) + "\n");
+}
+
+/**
+ * Wait for a JSON-RPC response with the given id.
+ */
+function waitForResponse(proc: ChildProcess, id: number, timeoutMs = 10_000): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`MCP response timeout (id=${id})`));
+    }, timeoutMs);
+
+    let buffer = "";
+
+    function onData(chunk: Buffer) {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!; // keep incomplete line in buffer
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          if (msg.id === id) {
+            cleanup();
+            resolve(msg);
+            return;
+          }
+        } catch {
+          // ignore non-JSON lines
+        }
+      }
+    }
+
+    function cleanup() {
+      clearTimeout(timer);
+      proc.stdout!.off("data", onData);
+    }
+
+    proc.stdout!.on("data", onData);
+  });
+}
+
+/**
+ * Spawn mcp-cron from mcp.json config, perform MCP handshake,
+ * and call list_tasks to kick-start scheduled task execution.
+ * The --prevent-sleep flag keeps the process alive.
+ */
+export async function startCronServer(): Promise<void> {
+  if (cronProc) return;
+
+  const servers = loadMcpServers();
+  const cronConfig = servers["cron"];
+  if (!cronConfig) return;
+
+  const proc = spawn(cronConfig.command, cronConfig.args, {
+    env: { ...process.env, ...cronConfig.env },
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+
+  proc.on("exit", (code) => {
+    if (cronProc === proc) {
+      console.log(`mcp-cron exited (code ${code})`);
+      cronProc = null;
+    }
+  });
+
+  cronProc = proc;
+
+  try {
+    // 1. Initialize
+    send(proc, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "goto-assistant", version: "1.0.0" },
+      },
+    });
+    await waitForResponse(proc, 1);
+
+    // 2. Initialized notification
+    send(proc, { jsonrpc: "2.0", method: "notifications/initialized" });
+
+    // 3. Call list_tasks to kick-start cron
+    send(proc, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "list_tasks", arguments: {} },
+    });
+    await waitForResponse(proc, 2);
+
+    console.log("mcp-cron started in background");
+  } catch (err) {
+    cronProc = null;
+    proc.kill();
+    throw err;
+  }
+}
+
+export async function stopCronServer(): Promise<void> {
+  if (!cronProc) return;
+  const proc = cronProc;
+  cronProc = null;
+  proc.kill();
+}

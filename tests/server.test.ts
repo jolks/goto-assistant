@@ -15,6 +15,7 @@ vi.mock("../src/agents/openai.js", () => ({
 }));
 
 import { createApp } from "../src/server.js";
+import { stopCronServer } from "../src/cron.js";
 import { saveConfig, saveMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
@@ -36,7 +37,8 @@ describe("server", () => {
     if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await stopCronServer();
     closeDb();
     if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
     if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
