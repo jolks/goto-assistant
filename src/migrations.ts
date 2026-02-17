@@ -1,6 +1,6 @@
-import { isConfigured, loadConfig, saveConfig, loadMcpServers, saveMcpServers, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, loadMcpServers, saveMcpServers, MCP_CONFIG_PATH, type McpServerConfig } from "./config.js";
 
-export const CURRENT_CONFIG_VERSION = 1;
+export const CURRENT_CONFIG_VERSION = 2;
 
 type Migration = (servers: Record<string, McpServerConfig>) => void;
 
@@ -8,6 +8,14 @@ const migrations: Record<number, Migration> = {
   1: (servers) => {
     if (!("time" in servers)) {
       servers.time = { command: "uvx", args: ["mcp-server-time"] };
+    }
+  },
+  2: (servers) => {
+    const cron = servers.cron;
+    if (!cron) return;
+    const idx = cron.args.indexOf("./data/mcp.json");
+    if (idx !== -1) {
+      cron.args[idx] = MCP_CONFIG_PATH;
     }
   },
 };

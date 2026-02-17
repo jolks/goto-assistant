@@ -89,4 +89,35 @@ describe("migrations", () => {
     const servers = loadMcpServers();
     expect(servers.time).toBeUndefined();
   });
+
+  it("replaces relative ./data/mcp.json with absolute MCP_CONFIG_PATH in cron args", () => {
+    saveConfig({ ...baseConfig, configVersion: 1 });
+    saveMcpServers({
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron", "--transport", "stdio", "--prevent-sleep", "--mcp-config-path", "./data/mcp.json", "--ai-provider", "anthropic"],
+      },
+    });
+
+    runMigrations();
+
+    const servers = loadMcpServers();
+    expect(servers.cron.args).toContain(MCP_CONFIG_PATH);
+    expect(servers.cron.args).not.toContain("./data/mcp.json");
+  });
+
+  it("leaves cron args unchanged when --mcp-config-path is already absolute", () => {
+    saveConfig({ ...baseConfig, configVersion: 1 });
+    saveMcpServers({
+      cron: {
+        command: "npx",
+        args: ["-y", "mcp-cron", "--mcp-config-path", "/custom/path/mcp.json"],
+      },
+    });
+
+    runMigrations();
+
+    const servers = loadMcpServers();
+    expect(servers.cron.args).toContain("/custom/path/mcp.json");
+  });
 });
