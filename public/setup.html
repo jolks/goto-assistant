@@ -213,6 +213,14 @@
         ]);
         const data = await configRes.json();
         const mcpData = await mcpRes.json();
+        // Patch default cron args with the server's resolved mcp.json path
+        if (data.mcpConfigPath) {
+          DEFAULT_CRON_ARGS = DEFAULT_CRON_ARGS.replace('./data/mcp.json', data.mcpConfigPath);
+          const cronDefault = defaultServers.find(s => s.name === 'cron');
+          if (cronDefault) {
+            cronDefault.args = cronDefault.args.replace('./data/mcp.json', data.mcpConfigPath);
+          }
+        }
         if (data.configured && data.config) {
           isEditing = true;
           window._savedConfig = data.config;

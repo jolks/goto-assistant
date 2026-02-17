@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
 import { startCronServer } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
@@ -111,11 +111,11 @@ export function createApp(): Express {
   // Get masked config for settings page
   app.get("/api/config", (_req, res) => {
     if (!isConfigured()) {
-      res.json({ configured: false });
+      res.json({ configured: false, mcpConfigPath: MCP_CONFIG_PATH });
       return;
     }
     const config = loadConfig();
-    res.json({ configured: true, config: getMaskedConfig(config) });
+    res.json({ configured: true, config: getMaskedConfig(config), mcpConfigPath: MCP_CONFIG_PATH });
   });
 
   // MCP servers endpoints

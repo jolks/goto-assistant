@@ -103,6 +103,7 @@ describe("server", () => {
     expect(body.configured).toBe(true);
     expect(body.config.claude.apiKey).toContain("****");
     expect(body.config.claude.apiKey).not.toBe(testConfig.claude.apiKey);
+    expect(body.mcpConfigPath).toBe(MCP_CONFIG_PATH);
   });
 
   it("GET /api/config does not include mcpServers", async () => {
@@ -288,6 +289,7 @@ describe("server", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.configured).toBe(false);
+    expect(body.mcpConfigPath).toBe(MCP_CONFIG_PATH);
   });
 
   it("GET /api/conversations/:id/messages returns saved messages", async () => {
