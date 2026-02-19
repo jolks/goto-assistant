@@ -126,7 +126,7 @@ function addSetupTypingIndicator() {
   var el = document.createElement('div');
   el.className = 'typing-indicator';
   el.id = 'setupTyping';
-  el.textContent = 'Thinking...';
+  el.innerHTML = '<span></span><span></span><span></span>';
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
 }
