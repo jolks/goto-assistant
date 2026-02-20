@@ -1,6 +1,31 @@
 // task-chat.js — Inline chat logic for task mode (create/modify tasks via AI).
 // Loaded as a plain <script> in the browser; importable via require() in tests.
 
+var taskRunState = {};
+// Shape: { [taskId]: { pollTimer, timeoutTimer, runStartTime, pendingResult } }
+// pendingResult: null while running, string (chat text) when result arrived but user wasn't viewing this task
+
+function cancelTaskRun(taskId) {
+  var state = taskRunState[taskId];
+  if (!state) return;
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  if (state.timeoutTimer) clearTimeout(state.timeoutTimer);
+  delete taskRunState[taskId];
+}
+
+function isTaskRunning(taskId) {
+  var state = taskRunState[taskId];
+  return !!state && !state.pendingResult;
+}
+
+function consumePendingResult(taskId) {
+  var state = taskRunState[taskId];
+  if (!state || !state.pendingResult) return null;
+  var result = state.pendingResult;
+  delete taskRunState[taskId]; // clean up fully — run is done
+  return result;
+}
+
 var taskChatState = {
   ws: null,
   conversationId: null,
@@ -127,6 +152,79 @@ function initTaskChat(taskContext) {
   connectTaskChat();
 }
 
+/**
+ * Run a task directly via API and poll for the result.
+ * @param {string} taskId - Task ID to run
+ * @param {HTMLButtonElement} runBtn - The run button element
+ * @param {function} renderTaskResult - Callback to refresh the results panel
+ * @param {function} formatDuration - Formats start/end into a human-readable duration
+ * @param {function} getCurrentTaskId - Returns the currently viewed task ID
+ */
+function runTask(taskId, runBtn, renderTaskResult, formatDuration, getCurrentTaskId) {
+  if (isTaskRunning(taskId)) return;
+
+  runBtn.disabled = true;
+  runBtn.innerHTML = '&#9696;';
+  runBtn.classList.add('task-running');
+  var runStartTime = Date.now();
+
+  var entry = { pollTimer: null, timeoutTimer: null, runStartTime: runStartTime, pendingResult: null };
+  taskRunState[taskId] = entry;
+
+  function resetButton() {
+    runBtn.disabled = false;
+    runBtn.innerHTML = '&#9654;';
+    runBtn.classList.remove('task-running');
+  }
+
+  fetch('/api/tasks/' + taskId + '/run', { method: 'POST' })
+    .then(function () {
+      entry.pollTimer = setInterval(function () {
+        fetch('/api/tasks/' + taskId + '/results?limit=1')
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            var result = Array.isArray(data) ? data[0] : data;
+            if (result && result.end_time && new Date(result.end_time).getTime() >= runStartTime) {
+              clearInterval(entry.pollTimer);
+              clearTimeout(entry.timeoutTimer);
+
+              var isError = (result.exit_code !== 0 && result.exit_code !== undefined) || result.error != null;
+              var output = result.output || result.error || result.result || '(no output)';
+              var duration = formatDuration(result.start_time, result.end_time);
+              var status = isError ? 'Failed' : 'OK';
+              var chatText = '**Task executed \u2014 ' + status + '**' + (duration ? ' (' + duration + ')' : '') + '\n```\n' + (typeof output === 'string' ? output : JSON.stringify(output, null, 2)) + '\n```';
+
+              if (getCurrentTaskId && getCurrentTaskId() === taskId) {
+                taskChatAddMessage('assistant', chatText);
+                fetch('/api/tasks/' + taskId + '/results?limit=5')
+                  .then(function (res) { return res.json(); })
+                  .then(function (fullData) { renderTaskResult(fullData); })
+                  .catch(function () {});
+                resetButton();
+                cancelTaskRun(taskId);
+              } else {
+                // User is viewing a different task or conversations — queue result
+                entry.pendingResult = chatText;
+                // Clean up timers but keep entry for consumePendingResult
+                entry.pollTimer = null;
+                entry.timeoutTimer = null;
+              }
+            }
+          })
+          .catch(function () {});
+      }, 3000);
+      entry.timeoutTimer = setTimeout(function () {
+        clearInterval(entry.pollTimer);
+        resetButton();
+        delete taskRunState[taskId];
+      }, 60000);
+    })
+    .catch(function () {
+      resetButton();
+      delete taskRunState[taskId];
+    });
+}
+
 function disconnectTaskChat() {
   taskChatState.active = false;
   if (taskChatState.ws) {
@@ -138,10 +236,15 @@ function disconnectTaskChat() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     taskChatState: taskChatState,
+    taskRunState: taskRunState,
+    cancelTaskRun: cancelTaskRun,
+    isTaskRunning: isTaskRunning,
+    consumePendingResult: consumePendingResult,
     taskChatAddMessage: taskChatAddMessage,
     addTaskTypingIndicator: addTaskTypingIndicator,
     removeTaskTypingIndicator: removeTaskTypingIndicator,
     sendTaskChatMessage: sendTaskChatMessage,
+    runTask: runTask,
     initTaskChat: initTaskChat,
     disconnectTaskChat: disconnectTaskChat,
   };

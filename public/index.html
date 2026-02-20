@@ -461,6 +461,7 @@
     }
 
     async function openTask(taskId) {
+      var isSameTask = (currentTaskId === taskId) && taskChatState.active;
       currentTaskId = taskId;
       closeSidebar();
       // Highlight in list
@@ -481,10 +482,20 @@
         renderTaskDetail(task);
         renderTaskResult(results);
 
-        // Init task chat with context
+        // Init task chat with context (only reset if switching tasks)
         const context = JSON.stringify(task, null, 2);
         showTaskDetail();
-        initTaskChat(context);
+        if (!isSameTask) {
+          initTaskChat(context);
+        } else {
+          taskChatState.taskContext = context;
+        }
+
+        // Deliver any pending run result queued while viewing another task
+        var pending = consumePendingResult(taskId);
+        if (pending) {
+          taskChatAddMessage('assistant', pending);
+        }
       } catch (err) {
         showTaskDetail();
         document.getElementById('taskDetailTitle').textContent = 'Error';
@@ -525,11 +536,18 @@
       toggleBtn.title = task.enabled ? 'Disable' : 'Enable';
       toggleBtn.style.color = task.enabled ? '#22c55e' : '';
 
-      runBtn.onclick = async () => {
-        try {
-          await fetch(`/api/tasks/${task.id}/run`, { method: 'POST' });
-          setTimeout(() => openTask(task.id), 1500);
-        } catch {}
+      if (isTaskRunning(task.id)) {
+        runBtn.disabled = true;
+        runBtn.innerHTML = '&#9696;';
+        runBtn.classList.add('task-running');
+      } else {
+        runBtn.disabled = false;
+        runBtn.innerHTML = '&#9654;';
+        runBtn.classList.remove('task-running');
+      }
+
+      runBtn.onclick = () => {
+        runTask(task.id, runBtn, renderTaskResult, formatDuration, () => currentTaskId);
       };
 
       toggleBtn.onclick = async () => {
