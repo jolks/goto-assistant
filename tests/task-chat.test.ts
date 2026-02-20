@@ -439,7 +439,7 @@ describe("task-chat", () => {
       expect(taskRunState["t2"]).toBeDefined();
     });
 
-    it("60s timeout removes entry and restores button state", async () => {
+    it("60s timeout removes entry, restores button, and shows timeout message", async () => {
       const staleTime = new Date(Date.now() - 60000).toISOString();
       const fetchMock = vi.fn()
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true }) })
@@ -453,6 +453,28 @@ describe("task-chat", () => {
       expect(runBtn.disabled).toBe(false);
       expect(runBtn.classList.contains("task-running")).toBe(false);
       expect(taskRunState["t1"]).toBeUndefined();
+
+      const msgs = document.querySelectorAll("#taskChatMessages .message.assistant");
+      expect(msgs.length).toBeGreaterThanOrEqual(1);
+      const lastMsg = msgs[msgs.length - 1];
+      expect(lastMsg.textContent).toContain("taking longer than expected");
+    });
+
+    it("60s timeout does not show message when viewing a different task", async () => {
+      mockGetCurrentTaskId.mockReturnValue("other-task");
+      const staleTime = new Date(Date.now() - 60000).toISOString();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true }) })
+        .mockResolvedValue({ ok: true, json: () => Promise.resolve([{ end_time: staleTime, output: "old" }]) });
+      vi.stubGlobal("fetch", fetchMock);
+
+      runTask("t1", runBtn, mockRenderTaskResult, mockFormatDuration, mockGetCurrentTaskId);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(runBtn.disabled).toBe(false);
+      const msgs = document.querySelectorAll("#taskChatMessages .message.assistant");
+      expect(msgs).toHaveLength(0);
     });
   });
 

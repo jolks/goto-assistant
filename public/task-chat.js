@@ -85,6 +85,9 @@ function connectTaskChat() {
       taskChatState.ws = ws;
       setTaskInputEnabled(true);
     },
+    onError: function () {
+      taskChatAddMessage('assistant', 'Connection error. Please try again.');
+    },
     onClose: function (closedWs) {
       if (taskChatState.ws === closedWs) {
         taskChatState.ws = null;
@@ -215,6 +218,9 @@ function runTask(taskId, runBtn, renderTaskResult, formatDuration, getCurrentTas
       }, 3000);
       entry.timeoutTimer = setTimeout(function () {
         clearInterval(entry.pollTimer);
+        if (getCurrentTaskId && getCurrentTaskId() === taskId) {
+          taskChatAddMessage('assistant', 'Task is taking longer than expected. Check results later.');
+        }
         resetButton();
         delete taskRunState[taskId];
       }, 60000);

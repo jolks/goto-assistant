@@ -443,6 +443,7 @@
       tasks.forEach(t => {
         const el = document.createElement('div');
         el.className = 'task-item' + (t.id === currentTaskId ? ' active' : '');
+        el.dataset.taskId = t.id;
         const dot = document.createElement('span');
         dot.className = 'task-status-dot' + (t.enabled ? ' enabled' : '');
         dot.title = t.enabled ? 'Enabled' : 'Disabled';
@@ -465,9 +466,8 @@
       currentTaskId = taskId;
       closeSidebar();
       // Highlight in list
-      document.querySelectorAll('.task-item').forEach(e => e.classList.remove('active'));
       document.querySelectorAll('.task-item').forEach(e => {
-        if (e.querySelector('.task-item-name')?.textContent === taskId) e.classList.add('active');
+        e.classList.toggle('active', e.dataset.taskId === taskId);
       });
 
       try {

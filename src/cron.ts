@@ -2,7 +2,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { loadMcpServers } from "./config.js";
 
 let cronProc: ChildProcess | null = null;
-let nextId = 10; // Start at 10 to avoid collision with startup handshake IDs 1-2
+// IDs 1-99 reserved for startup handshake (currently: 1=initialize, 2=list_tasks).
+// callCronTool() allocates from 100+ to avoid collisions.
+let nextId = 100;
 
 export function isCronRunning(): boolean {
   return cronProc !== null;

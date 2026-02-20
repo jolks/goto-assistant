@@ -11,7 +11,7 @@ vi.hoisted(() => {
   };
 });
 
-import { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator } from "../public/chat-core.js";
+import { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator, chatCreateWs } from "../public/chat-core.js";
 
 describe("chat-core", () => {
   beforeEach(() => {
@@ -63,6 +63,36 @@ describe("chat-core", () => {
     it("does nothing when container is missing", () => {
       chatAddTypingIndicator("nonexistent", "typing");
       expect(document.getElementById("typing")).toBeNull();
+    });
+  });
+
+  describe("chatCreateWs", () => {
+    let listeners: Record<string, Array<() => void>>;
+    let mockWs: Record<string, unknown>;
+
+    beforeEach(() => {
+      listeners = {};
+      mockWs = {
+        addEventListener: (event: string, fn: () => void) => {
+          if (!listeners[event]) listeners[event] = [];
+          listeners[event].push(fn);
+        },
+      };
+      vi.stubGlobal("WebSocket", vi.fn(() => mockWs));
+      vi.stubGlobal("window", { location: { protocol: "http:", host: "localhost:3000" } });
+    });
+
+    it("calls onError callback on error event", () => {
+      const onError = vi.fn();
+      chatCreateWs({ onMessage: vi.fn(), onError });
+      // Simulate error event
+      listeners["error"].forEach(fn => fn());
+      expect(onError).toHaveBeenCalledWith(mockWs);
+    });
+
+    it("does not throw when onError is not provided", () => {
+      chatCreateWs({ onMessage: vi.fn() });
+      expect(() => listeners["error"].forEach(fn => fn())).not.toThrow();
     });
   });
 

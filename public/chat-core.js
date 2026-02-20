@@ -54,6 +54,7 @@ function chatRemoveTypingIndicator(indicatorId) {
  * @param {Object} callbacks
  * @param {function} callbacks.onMessage - Called with each MessageEvent
  * @param {function} [callbacks.onOpen] - Called with the new ws when connection opens
+ * @param {function} [callbacks.onError] - Called with the ws when a connection error occurs
  * @param {function} [callbacks.onClose] - Called with the specific ws that closed (stale-WS guard)
  * @param {function} [callbacks.shouldReconnect] - Return true to auto-reconnect after 2s
  * @returns {WebSocket}
@@ -64,6 +65,9 @@ function chatCreateWs(callbacks) {
   ws.addEventListener('message', callbacks.onMessage);
   ws.addEventListener('open', function () {
     if (callbacks.onOpen) callbacks.onOpen(ws);
+  });
+  ws.addEventListener('error', function () {
+    if (callbacks.onError) callbacks.onError(ws);
   });
   ws.addEventListener('close', function () {
     if (callbacks.onClose) callbacks.onClose(ws);

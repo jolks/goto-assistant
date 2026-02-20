@@ -155,6 +155,9 @@ function connectAiChat() {
     onOpen: function (ws) {
       setupChatState.ws = ws;
     },
+    onError: function () {
+      addMessage('assistant', 'Connection error. Please check your network and refresh the page.');
+    },
     onClose: function (closedWs) {
       if (setupChatState.ws === closedWs) {
         setupChatState.ws = null;
