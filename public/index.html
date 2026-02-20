@@ -560,7 +560,9 @@
           await fetch(`/api/tasks/${task.id}/${endpoint}`, { method: 'POST' });
           openTask(task.id);
           loadTasks();
-        } catch {}
+        } catch {
+          taskChatAddMessage('assistant', `Failed to ${endpoint} task. Please try again.`);
+        }
       };
 
       deleteBtn.onclick = async () => {
@@ -570,7 +572,9 @@
           currentTaskId = null;
           showChatMain();
           loadTasks();
-        } catch {}
+        } catch {
+          taskChatAddMessage('assistant', 'Failed to delete task. Please try again.');
+        }
       };
     }
 
