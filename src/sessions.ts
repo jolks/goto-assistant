@@ -25,6 +25,11 @@ const DB_PATH = path.join(DATA_DIR, "sessions.db");
 
 let db: Database.Database | null = null;
 
+/**
+ * Lazily initialize and return the database connection.
+ * Schema creation and migrations run on first call, which happens
+ * when the first database query is made (not on server startup).
+ */
 export function getDb(): Database.Database {
   if (db) return db;
 
@@ -40,15 +45,17 @@ export function getDb(): Database.Database {
       provider TEXT NOT NULL, -- provider at creation time; may differ from later messages if user switches provider mid-conversation
       sdk_session_id TEXT,
       title TEXT,
-      setup INTEGER NOT NULL DEFAULT 0,
+      mode INTEGER NOT NULL DEFAULT 0, -- 0 = conversation, 1 = setup, 2 = task
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
-  // Migration: add setup column to existing tables
+  // Migration: rename setup column to mode
   const cols = db.pragma("table_info(conversations)") as Array<{ name: string }>;
-  if (!cols.some((c) => c.name === "setup")) {
-    db.exec("ALTER TABLE conversations ADD COLUMN setup INTEGER NOT NULL DEFAULT 0");
+  if (cols.some((c) => c.name === "setup")) {
+    db.exec("ALTER TABLE conversations RENAME COLUMN setup TO mode");
+  } else if (!cols.some((c) => c.name === "mode")) {
+    db.exec("ALTER TABLE conversations ADD COLUMN mode INTEGER NOT NULL DEFAULT 0");
   }
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -63,14 +70,14 @@ export function getDb(): Database.Database {
   return db;
 }
 
-export function createConversation(provider: string, setup?: boolean): Conversation {
+export function createConversation(provider: string, mode: number = 0): Conversation {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   getDb()
     .prepare(
-      "INSERT INTO conversations (id, provider, setup, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO conversations (id, provider, mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
     )
-    .run(id, provider, setup ? 1 : 0, now, now);
+    .run(id, provider, mode, now, now);
   return { id, provider, sdk_session_id: null, title: null, created_at: now, updated_at: now };
 }
 
@@ -98,7 +105,7 @@ export function updateTitle(conversationId: string, title: string): void {
 
 export function listConversations(): Conversation[] {
   return getDb()
-    .prepare("SELECT * FROM conversations WHERE setup = 0 ORDER BY updated_at DESC")
+    .prepare("SELECT * FROM conversations WHERE mode = 0 ORDER BY updated_at DESC")
     .all() as Conversation[];
 }
 

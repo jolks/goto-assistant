@@ -113,13 +113,14 @@ describe("sessions", () => {
     expect(messages).toEqual([]);
   });
 
-  it("hides setup conversations from listConversations", () => {
-    createConversation("claude", true);
-    createConversation("claude");
+  it("hides setup and task conversations from listConversations", () => {
+    createConversation("claude", 1); // setup
+    createConversation("claude", 2); // task
+    createConversation("claude");    // regular (mode 0)
 
     const list = listConversations();
     expect(list).toHaveLength(1);
-    // The non-setup conversation should be returned
+    // Only the regular conversation should be returned
     expect(list[0].provider).toBe("claude");
   });
 

@@ -4,7 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import multer from "multer";
 import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
-import { startCronServer } from "./cron.js";
+import { startCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
@@ -183,6 +183,93 @@ export function createApp(): Express {
     res.send(result.data);
   });
 
+  // --- Task management endpoints (proxy to mcp-cron) ---
+
+  app.get("/api/tasks", async (_req, res) => {
+    try {
+      if (!isCronRunning()) { res.json([]); return; }
+      const result = await callCronTool("list_tasks");
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.get("/api/tasks/:id", async (req, res) => {
+    try {
+      const result = await callCronTool("get_task", { id: req.params.id });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.post("/api/tasks", async (req, res) => {
+    try {
+      const { type, ...rest } = req.body;
+      const toolName = type === "AI" ? "add_ai_task" : "add_task";
+      const result = await callCronTool(toolName, rest);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.put("/api/tasks/:id", async (req, res) => {
+    try {
+      const result = await callCronTool("update_task", { id: req.params.id, ...req.body });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.delete("/api/tasks/:id", async (req, res) => {
+    try {
+      const result = await callCronTool("remove_task", { id: req.params.id });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.post("/api/tasks/:id/run", async (req, res) => {
+    try {
+      const result = await callCronTool("run_task", { id: req.params.id });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.post("/api/tasks/:id/enable", async (req, res) => {
+    try {
+      const result = await callCronTool("enable_task", { id: req.params.id });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.post("/api/tasks/:id/disable", async (req, res) => {
+    try {
+      const result = await callCronTool("disable_task", { id: req.params.id });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  app.get("/api/tasks/:id/results", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 1;
+      const result = await callCronTool("get_task_result", { id: req.params.id, limit });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
   return app;
 }
 
@@ -226,6 +313,44 @@ If the user insists on adding an unverified server after your warning, proceed b
 Help the user modify their configuration. When done, tell them they can close this chat panel.
 Note: Changes to config.json and mcp.json take effect on the next conversation. Only server port changes require a restart.`;
 
+const TASK_SYSTEM_PROMPT = `You are helping the user manage a scheduled task in their goto-assistant.
+
+You have access to mcp-cron tools to modify tasks:
+- update_task: Update task properties (name, prompt/command, schedule, enabled)
+- enable_task / disable_task: Toggle task on/off
+- remove_task: Delete a task
+- run_task: Execute a task immediately
+- get_task_result: View recent execution results
+
+Here are the current task details:
+`;
+
+const TASK_CREATE_SYSTEM_PROMPT = `You are helping the user create a new scheduled task in their goto-assistant.
+
+You have access to mcp-cron tools:
+- add_task: Create a shell command task (requires name and command)
+- add_ai_task: Create an AI prompt task (requires name and prompt)
+
+**Task types:**
+- **Shell command**: Runs a shell command on schedule (e.g., backup scripts, health checks)
+- **AI prompt**: Sends a prompt to the AI on schedule (e.g., daily summaries, periodic analysis)
+
+**Common cron schedule patterns:**
+- Every minute: * * * * *
+- Every 5 minutes: */5 * * * *
+- Every hour: 0 * * * *
+- Every day at midnight: 0 0 * * *
+- Every day at 9 AM: 0 9 * * *
+- Every Monday at 9 AM: 0 9 * * 1
+- Every weekday at 9 AM: 0 9 * * 1-5
+
+**Important:**
+- Always set enabled: true if the user wants the task to start running immediately
+- Ask what the task should do, how often, and whether to enable it right away
+- After creating the task, confirm the details to the user
+
+Guide the user through creating their task. Ask what kind of task they want to create.`;
+
 export function createServer(app: Express) {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
@@ -238,6 +363,8 @@ export function createServer(app: Express) {
         conversationId?: string;
         attachments?: Array<{ fileId: string; filename: string; mimeType: string }>;
         setupMode?: boolean;
+        taskMode?: boolean;
+        taskContext?: string;
       };
       try {
         msg = JSON.parse(raw.toString());
@@ -259,6 +386,9 @@ export function createServer(app: Express) {
       const config = loadConfig();
       const mcpServers = loadMcpServers();
 
+      // Determine conversation mode: 0 = chat, 1 = setup, 2 = task
+      const mode = msg.taskMode ? 2 : msg.setupMode ? 1 : 0;
+
       // Get or create conversation
       let conversationId = msg.conversationId;
       let resumeSessionId: string | undefined;
@@ -272,7 +402,7 @@ export function createServer(app: Express) {
       }
 
       if (!conversationId) {
-        const conv = createConversation(config.provider, !!msg.setupMode);
+        const conv = createConversation(config.provider, mode);
         conversationId = conv.id;
         isNewConversation = true;
       }
@@ -316,7 +446,14 @@ export function createServer(app: Express) {
         const allMessages = getMessages(conversationId);
         const history = allMessages.slice(0, -1); // exclude the message we just saved
 
-        const systemPromptOverride = msg.setupMode ? SETUP_SYSTEM_PROMPT : undefined;
+        let systemPromptOverride: string | undefined;
+        if (mode === 1) {
+          systemPromptOverride = SETUP_SYSTEM_PROMPT;
+        } else if (mode === 2) {
+          systemPromptOverride = msg.taskContext
+            ? TASK_SYSTEM_PROMPT + msg.taskContext
+            : TASK_CREATE_SYSTEM_PROMPT;
+        }
 
         let responseText = "";
         const result = await routeMessage(

@@ -12,15 +12,27 @@
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <script src="/task-chat.js"></script>
 </head>
 <body>
   <div class="chat-layout">
     <div class="sidebar">
-      <div class="sidebar-header">
-        <h2>Conversations</h2>
-        <button class="btn-icon" id="newChatBtn" title="New chat">+</button>
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-tab="conversations" onclick="switchTab('conversations')">Conversations</button>
+        <button class="sidebar-tab" data-tab="tasks" onclick="switchTab('tasks')">Tasks</button>
       </div>
-      <div class="conversation-list" id="conversationList"></div>
+      <div class="sidebar-panel active" id="panelConversations">
+        <div class="sidebar-panel-header">
+          <button class="btn-icon" id="newChatBtn" title="New chat">+</button>
+        </div>
+        <div class="conversation-list" id="conversationList"></div>
+      </div>
+      <div class="sidebar-panel" id="panelTasks">
+        <div class="sidebar-panel-header">
+          <button class="btn-icon" id="newTaskBtn" title="Create task">+</button>
+        </div>
+        <div class="task-list" id="taskList"></div>
+      </div>
     </div>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
@@ -45,6 +57,35 @@
           <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
           <textarea id="input" rows="1" placeholder="Send a message..." autofocus></textarea>
           <button class="btn btn-primary" id="sendBtn">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Detail / Create View -->
+    <div class="task-detail" id="taskDetail" style="display:none">
+      <div class="task-detail-header">
+        <button class="task-back-btn" id="taskBackBtn" title="Back to tasks">&larr;</button>
+        <h2 id="taskDetailTitle">Task</h2>
+        <div class="task-detail-actions" id="taskDetailActions">
+          <button class="btn-icon" id="taskRunBtn" title="Run now">&#9654;</button>
+          <button class="btn-icon" id="taskToggleBtn" title="Enable/Disable"></button>
+          <button class="btn-icon" id="taskDeleteBtn" title="Delete">&#128465;</button>
+        </div>
+      </div>
+      <div class="task-detail-body">
+        <div class="task-info" id="taskInfo">
+          <div class="task-meta" id="taskMeta"></div>
+          <div class="task-content" id="taskContent"></div>
+          <div class="task-results" id="taskResults"></div>
+        </div>
+        <div class="task-chat-panel">
+          <div class="task-chat-messages" id="taskChatMessages"></div>
+          <div class="task-chat-input">
+            <div class="setup-chat-input-row">
+              <textarea id="taskChatInput" rows="1" placeholder="Ask AI to modify this task..."></textarea>
+              <button id="taskChatSendBtn">Send</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -241,6 +282,7 @@
     document.getElementById('newChatBtn').addEventListener('click', () => {
       currentConversationId = null;
       currentAssistantEl = null;
+      showChatMain();
       clearMessages();
       document.getElementById('chatTitle').textContent = 'New Conversation';
       document.querySelectorAll('.conversation-item').forEach(el => el.classList.remove('active'));
@@ -291,6 +333,7 @@
 
           titleSpan.addEventListener('click', async () => {
             currentConversationId = c.id;
+            showChatMain();
             document.getElementById('messages').innerHTML = '';
             hideEmptyState();
             document.getElementById('chatTitle').textContent = displayTitle;
@@ -334,6 +377,262 @@
       if (dx > 80 && touchStartX < 30) toggleSidebar();
       else if (dx < -80 && document.querySelector('.sidebar').classList.contains('open')) closeSidebar();
     }, { passive: true });
+
+    // --- Task Management ---
+    let currentTaskId = null;
+    let currentTab = 'conversations';
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function formatDuration(startTime, endTime) {
+      if (!startTime || !endTime) return '';
+      const ms = new Date(endTime) - new Date(startTime);
+      if (ms < 1000) return ms + 'ms';
+      const secs = Math.round(ms / 1000);
+      if (secs < 60) return secs + 's';
+      const mins = Math.floor(secs / 60);
+      const remSecs = secs % 60;
+      if (mins < 60) return mins + 'm ' + remSecs + 's';
+      const hrs = Math.floor(mins / 60);
+      return hrs + 'h ' + (mins % 60) + 'm';
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.sidebar-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+      });
+      document.getElementById('panelConversations').classList.toggle('active', tab === 'conversations');
+      document.getElementById('panelTasks').classList.toggle('active', tab === 'tasks');
+      if (tab === 'tasks') loadTasks();
+    }
+
+    function showChatMain() {
+      document.querySelector('.chat-main').style.display = '';
+      document.getElementById('taskDetail').style.display = 'none';
+      disconnectTaskChat();
+    }
+
+    function showTaskDetail() {
+      document.querySelector('.chat-main').style.display = 'none';
+      document.getElementById('taskDetail').style.display = '';
+    }
+
+    async function loadTasks() {
+      try {
+        const res = await fetch('/api/tasks');
+        const data = await res.json();
+        const tasks = Array.isArray(data) ? data : (data.tasks || []);
+        renderTaskList(tasks);
+      } catch {
+        renderTaskList([]);
+      }
+    }
+
+    function renderTaskList(tasks) {
+      const list = document.getElementById('taskList');
+      list.innerHTML = '';
+      if (tasks.length === 0) {
+        list.innerHTML = '<div class="task-list-empty">No tasks yet</div>';
+        return;
+      }
+      tasks.forEach(t => {
+        const el = document.createElement('div');
+        el.className = 'task-item' + (t.id === currentTaskId ? ' active' : '');
+        const dot = document.createElement('span');
+        dot.className = 'task-status-dot' + (t.enabled ? ' enabled' : '');
+        dot.title = t.enabled ? 'Enabled' : 'Disabled';
+        el.appendChild(dot);
+        const name = document.createElement('span');
+        name.className = 'task-item-name';
+        name.textContent = t.name || t.id;
+        el.appendChild(name);
+        const badge = document.createElement('span');
+        badge.className = 'task-type-badge';
+        badge.textContent = t.type === 'AI' ? 'AI' : 'CMD';
+        el.appendChild(badge);
+        el.addEventListener('click', () => openTask(t.id));
+        list.appendChild(el);
+      });
+    }
+
+    async function openTask(taskId) {
+      currentTaskId = taskId;
+      closeSidebar();
+      // Highlight in list
+      document.querySelectorAll('.task-item').forEach(e => e.classList.remove('active'));
+      document.querySelectorAll('.task-item').forEach(e => {
+        if (e.querySelector('.task-item-name')?.textContent === taskId) e.classList.add('active');
+      });
+
+      try {
+        const [taskRes, resultsRes] = await Promise.all([
+          fetch(`/api/tasks/${taskId}`),
+          fetch(`/api/tasks/${taskId}/results?limit=5`),
+        ]);
+        const task = await taskRes.json();
+        let results = null;
+        try { results = await resultsRes.json(); } catch {}
+
+        renderTaskDetail(task);
+        renderTaskResult(results);
+
+        // Init task chat with context
+        const context = JSON.stringify(task, null, 2);
+        showTaskDetail();
+        initTaskChat(context);
+      } catch (err) {
+        showTaskDetail();
+        document.getElementById('taskDetailTitle').textContent = 'Error';
+        document.getElementById('taskMeta').innerHTML = '<p>Failed to load task.</p>';
+      }
+    }
+
+    function renderTaskDetail(task) {
+      document.getElementById('taskDetailTitle').textContent = task.name || task.id;
+      document.getElementById('taskDetailActions').style.display = '';
+      document.getElementById('taskInfo').style.display = '';
+
+      // Meta
+      const meta = document.getElementById('taskMeta');
+      meta.innerHTML = `
+        <div class="task-meta-row"><span class="task-meta-label">ID</span><span class="task-meta-value">${escapeHtml(task.id || '')}</span></div>
+        <div class="task-meta-row"><span class="task-meta-label">Type</span><span class="task-meta-value"><span class="task-type-badge">${task.type === 'AI' ? 'AI' : 'CMD'}</span></span></div>
+        <div class="task-meta-row"><span class="task-meta-label">Status</span><span class="task-meta-value">${task.enabled ? '<span class="task-enabled-badge">Enabled</span>' : '<span class="task-disabled-badge">Disabled</span>'}</span></div>
+        ${task.schedule ? `<div class="task-meta-row"><span class="task-meta-label">Schedule</span><span class="task-meta-value"><code>${escapeHtml(task.schedule)}</code></span></div>` : ''}
+      `;
+
+      // Content (prompt or command)
+      const content = document.getElementById('taskContent');
+      if (task.prompt) {
+        content.innerHTML = `<div class="task-content-label">Prompt</div><pre class="task-content-pre">${escapeHtml(task.prompt)}</pre>`;
+      } else if (task.command) {
+        content.innerHTML = `<div class="task-content-label">Command</div><pre class="task-content-pre">${escapeHtml(task.command)}</pre>`;
+      } else {
+        content.innerHTML = '';
+      }
+
+      // Wire action buttons
+      const runBtn = document.getElementById('taskRunBtn');
+      const toggleBtn = document.getElementById('taskToggleBtn');
+      const deleteBtn = document.getElementById('taskDeleteBtn');
+
+      toggleBtn.textContent = task.enabled ? '\u25CF' : '\u25CB';
+      toggleBtn.title = task.enabled ? 'Disable' : 'Enable';
+      toggleBtn.style.color = task.enabled ? '#22c55e' : '';
+
+      runBtn.onclick = async () => {
+        try {
+          await fetch(`/api/tasks/${task.id}/run`, { method: 'POST' });
+          setTimeout(() => openTask(task.id), 1500);
+        } catch {}
+      };
+
+      toggleBtn.onclick = async () => {
+        const endpoint = task.enabled ? 'disable' : 'enable';
+        try {
+          await fetch(`/api/tasks/${task.id}/${endpoint}`, { method: 'POST' });
+          openTask(task.id);
+          loadTasks();
+        } catch {}
+      };
+
+      deleteBtn.onclick = async () => {
+        if (!confirm('Delete this task?')) return;
+        try {
+          await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+          currentTaskId = null;
+          showChatMain();
+          loadTasks();
+        } catch {}
+      };
+    }
+
+    function renderTaskResult(resultData) {
+      const container = document.getElementById('taskResults');
+      if (!resultData || (Array.isArray(resultData) && resultData.length === 0)) {
+        container.innerHTML = '<div class="task-content-label">Results</div><p class="task-no-results">No execution results yet.</p>';
+        return;
+      }
+      const results = Array.isArray(resultData) ? resultData : [resultData];
+      let html = '<div class="task-content-label">Recent Results</div>';
+      results.forEach(r => {
+        const time = r.start_time ? new Date(r.start_time).toLocaleString() : (r.timestamp ? new Date(r.timestamp).toLocaleString() : 'Unknown time');
+        const isError = (r.exit_code !== 0 && r.exit_code !== undefined) || r.error != null;
+        const status = isError ? 'error' : 'success';
+        const output = r.output || r.error || r.result || '(no output)';
+        const duration = formatDuration(r.start_time, r.end_time);
+        html += `<div class="task-result-item">
+          <div class="task-result-header"><span class="task-result-time">${escapeHtml(time)}${duration ? ' &middot; ' + escapeHtml(duration) : ''}</span><span class="task-result-status ${status}">${isError ? 'Failed' : 'OK'}</span></div>
+          <pre class="task-result-output">${escapeHtml(typeof output === 'string' ? output : JSON.stringify(output, null, 2))}</pre>
+        </div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function openTaskCreate() {
+      currentTaskId = null;
+      closeSidebar();
+      document.querySelectorAll('.task-item').forEach(e => e.classList.remove('active'));
+      document.getElementById('taskDetailTitle').textContent = 'Create Task';
+      document.getElementById('taskDetailActions').style.display = 'none';
+      document.getElementById('taskInfo').style.display = 'none';
+      showTaskDetail();
+      initTaskChat(null);
+    }
+
+    // On task chat done, refresh task info without clearing chat messages
+    window.onTaskChatDone = async function () {
+      if (currentTaskId) {
+        try {
+          const [taskRes, resultsRes] = await Promise.all([
+            fetch(`/api/tasks/${currentTaskId}`),
+            fetch(`/api/tasks/${currentTaskId}/results?limit=5`),
+          ]);
+          const task = await taskRes.json();
+          let results = null;
+          try { results = await resultsRes.json(); } catch {}
+          renderTaskDetail(task);
+          renderTaskResult(results);
+          // Update chat context for subsequent messages
+          taskChatState.taskContext = JSON.stringify(task, null, 2);
+        } catch {}
+      }
+      loadTasks();
+    };
+
+    // Back button
+    document.getElementById('taskBackBtn').addEventListener('click', () => {
+      currentTaskId = null;
+      showChatMain();
+      document.querySelectorAll('.task-item').forEach(e => e.classList.remove('active'));
+    });
+
+    // New task button
+    document.getElementById('newTaskBtn').addEventListener('click', openTaskCreate);
+
+    // Task chat input handlers
+    document.getElementById('taskChatSendBtn').addEventListener('click', () => {
+      const input = document.getElementById('taskChatInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      sendTaskChatMessage(text);
+    });
+    document.getElementById('taskChatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const input = document.getElementById('taskChatInput');
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        sendTaskChatMessage(text);
+      }
+    });
 
     connectWs();
     loadConversations();
