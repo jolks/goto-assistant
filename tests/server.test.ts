@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import path from "node:path";
-
-vi.hoisted(() => {
-  process.env.GOTO_DATA_DIR = "tests/data";
-});
 
 // Mock agent modules to avoid real SDK calls
 vi.mock("../src/agents/claude.js", () => ({
@@ -13,38 +8,31 @@ vi.mock("../src/agents/claude.js", () => ({
 vi.mock("../src/agents/openai.js", () => ({
   runOpenAI: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("../src/cron.js", () => ({
+  startCronServer: vi.fn().mockResolvedValue(undefined),
+  stopCronServer: vi.fn().mockResolvedValue(undefined),
+  isCronRunning: vi.fn().mockReturnValue(false),
+  callCronTool: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { createApp } from "../src/server.js";
-import { stopCronServer } from "../src/cron.js";
-import { saveConfig, saveMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
+import { stopCronServer, isCronRunning, callCronTool } from "../src/cron.js";
+import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
 import { UPLOADS_DIR } from "../src/uploads.js";
-
-const CONFIG_PATH = path.join(DATA_DIR, "config.json");
-const DB_PATH = path.join(DATA_DIR, "sessions.db");
-
-const testConfig: Config = {
-  provider: "claude",
-  claude: { apiKey: "sk-ant-test123456", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
-  openai: { apiKey: "sk-test789", model: "gpt-4o", baseUrl: "" },
-  server: { port: 3000 },
-};
+import { CONFIG_PATH, testConfig, cleanupConfigFiles, cleanupDbFiles } from "./helpers.js";
 
 describe("server", () => {
   beforeEach(() => {
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
+    cleanupConfigFiles();
   });
 
   afterEach(async () => {
     await stopCronServer();
     closeDb();
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
-    for (const f of [DB_PATH, DB_PATH + "-wal", DB_PATH + "-shm"]) {
-      if (fs.existsSync(f)) fs.unlinkSync(f);
-    }
+    cleanupConfigFiles();
+    cleanupDbFiles();
     if (fs.existsSync(UPLOADS_DIR)) fs.rmSync(UPLOADS_DIR, { recursive: true });
   });
 
@@ -231,7 +219,7 @@ describe("server", () => {
 
       // Backend should resolve the real OpenAI key from config.json
       const saved = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, "utf-8"));
-      expect(saved.mcpServers.cron.env.OPENAI_API_KEY).toBe("sk-test789");
+      expect(saved.mcpServers.cron.env.OPENAI_API_KEY).toBe("sk-openai-test789");
     } finally {
       if (savedAnthropicKey) process.env.ANTHROPIC_API_KEY = savedAnthropicKey;
       if (savedOpenaiKey) process.env.OPENAI_API_KEY = savedOpenaiKey;
@@ -373,6 +361,132 @@ describe("server", () => {
     const app = createApp();
     const res = await makeRequest(app, "GET", "/api/uploads/nonexistent");
     expect(res.status).toBe(404);
+  });
+
+  describe("task API endpoints", () => {
+    beforeEach(() => {
+      saveConfig(testConfig);
+      vi.mocked(isCronRunning).mockReturnValue(false);
+      vi.mocked(callCronTool).mockReset();
+    });
+
+    it("GET /api/tasks returns [] when cron not running", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/tasks");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual([]);
+      expect(callCronTool).not.toHaveBeenCalled();
+    });
+
+    it("GET /api/tasks calls list_tasks when cron running", async () => {
+      vi.mocked(isCronRunning).mockReturnValue(true);
+      vi.mocked(callCronTool).mockResolvedValue([{ id: "1", name: "test" }]);
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/tasks");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual([{ id: "1", name: "test" }]);
+      expect(callCronTool).toHaveBeenCalledWith("list_tasks");
+    });
+
+    it("GET /api/tasks returns 500 on callCronTool error", async () => {
+      vi.mocked(isCronRunning).mockReturnValue(true);
+      vi.mocked(callCronTool).mockRejectedValue(new Error("cron failed"));
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/tasks");
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe("cron failed");
+    });
+
+    it("GET /api/tasks/:id calls get_task with correct id", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ id: "abc", name: "my task" });
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/tasks/abc");
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("get_task", { id: "abc" });
+    });
+
+    it("POST /api/tasks with shell type calls add_task", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ id: "new1" });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/tasks", true, {
+        type: "shell_command",
+        name: "backup",
+        command: "echo hello",
+      });
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("add_task", { name: "backup", command: "echo hello" });
+    });
+
+    it("POST /api/tasks with AI type calls add_ai_task", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ id: "new2" });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/tasks", true, {
+        type: "AI",
+        name: "summary",
+        prompt: "summarize today",
+      });
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("add_ai_task", { name: "summary", prompt: "summarize today" });
+    });
+
+    it("PUT /api/tasks/:id calls update_task with merged id and body", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ ok: true });
+      const app = createApp();
+      const res = await makeRequest(app, "PUT", "/api/tasks/t1", true, { name: "updated" });
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("update_task", { id: "t1", name: "updated" });
+    });
+
+    it("DELETE /api/tasks/:id calls remove_task", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ ok: true });
+      const app = createApp();
+      const res = await makeRequest(app, "DELETE", "/api/tasks/t1");
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("remove_task", { id: "t1" });
+    });
+
+    it("POST /api/tasks/:id/run calls run_task", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ ok: true });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/tasks/t1/run");
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("run_task", { id: "t1" });
+    });
+
+    it("POST /api/tasks/:id/enable calls enable_task", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ ok: true });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/tasks/t1/enable");
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("enable_task", { id: "t1" });
+    });
+
+    it("POST /api/tasks/:id/disable calls disable_task", async () => {
+      vi.mocked(callCronTool).mockResolvedValue({ ok: true });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/tasks/t1/disable");
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("disable_task", { id: "t1" });
+    });
+
+    it("GET /api/tasks/:id/results calls get_task_result with default limit=1", async () => {
+      vi.mocked(callCronTool).mockResolvedValue([]);
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/tasks/t1/results");
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("get_task_result", { id: "t1", limit: 1 });
+    });
+
+    it("GET /api/tasks/:id/results?limit=5 passes limit=5", async () => {
+      vi.mocked(callCronTool).mockResolvedValue([]);
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/tasks/t1/results?limit=5");
+      expect(res.status).toBe(200);
+      expect(callCronTool).toHaveBeenCalledWith("get_task_result", { id: "t1", limit: 5 });
+    });
   });
 });
 

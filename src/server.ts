@@ -4,11 +4,12 @@ import http from "node:http";
 import path from "node:path";
 import multer from "multer";
 import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
-import { startCronServer } from "./cron.js";
+import { startCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
 import { saveUpload, getUpload, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
+import { SETUP_SYSTEM_PROMPT, TASK_SYSTEM_PROMPT, TASK_CREATE_SYSTEM_PROMPT } from "./prompts.js";
 
 export function createApp(): Express {
   const app = express();
@@ -183,48 +184,58 @@ export function createApp(): Express {
     res.send(result.data);
   });
 
+  // --- Task management endpoints (proxy to mcp-cron) ---
+
+  function cronProxy(
+    method: "get" | "post" | "put" | "delete",
+    routePath: string,
+    toolName: string,
+    buildArgs?: (req: import("express").Request) => Record<string, unknown>
+  ) {
+    app[method](routePath, async (req, res) => {
+      try {
+        const result = await callCronTool(toolName, buildArgs ? buildArgs(req) : { id: req.params.id });
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+      }
+    });
+  }
+
+  app.get("/api/tasks", async (_req, res) => {
+    try {
+      if (!isCronRunning()) { res.json([]); return; }
+      const result = await callCronTool("list_tasks");
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  cronProxy("get", "/api/tasks/:id", "get_task");
+
+  app.post("/api/tasks", async (req, res) => {
+    try {
+      const { type, ...rest } = req.body;
+      const result = await callCronTool(type === "AI" ? "add_ai_task" : "add_task", rest);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  cronProxy("put", "/api/tasks/:id", "update_task", (req) => ({ id: req.params.id, ...req.body }));
+  cronProxy("delete", "/api/tasks/:id", "remove_task");
+  cronProxy("post", "/api/tasks/:id/run", "run_task");
+  cronProxy("post", "/api/tasks/:id/enable", "enable_task");
+  cronProxy("post", "/api/tasks/:id/disable", "disable_task");
+  cronProxy("get", "/api/tasks/:id/results", "get_task_result", (req) => ({
+    id: req.params.id,
+    limit: parseInt(req.query.limit as string) || 1,
+  }));
+
   return app;
 }
-
-const SETUP_SYSTEM_PROMPT = `You are helping the user configure their goto-assistant.
-
-There are two config files you can read and modify using your filesystem tools:
-
-**./data/config.json** — Main app config:
-- provider: "claude" or "openai"
-- claude: { apiKey, model, baseUrl }
-- openai: { apiKey, model, baseUrl }
-- server: { port }
-
-**./data/mcp.json** — MCP server config:
-- mcpServers: { name: { command, args (string array), env (optional object) } }
-
-Default MCP servers have been configured:
-- **cron** (mcp-cron): Scheduled task execution
-- **memory** (@modelcontextprotocol/server-memory): Persistent knowledge graph
-- **filesystem** (@modelcontextprotocol/server-filesystem): File system access
-- **time** (mcp-server-time): Current time information
-
-**IMPORTANT — cron server must stay in sync with config.json:**
-The cron server in mcp.json has args that mirror the provider settings in config.json. When the provider, model, API key, or base URL changes, you MUST update both files:
-- \`--ai-provider\`: "anthropic" for claude, "openai" for openai. If baseUrl is set (LiteLLM proxy), always use "openai".
-- \`--ai-model\`: must match the model in config.json for the active provider.
-- \`--ai-base-url\`: add this flag when baseUrl is set, remove it when empty.
-- \`env\` object: the key must be ANTHROPIC_API_KEY for claude, OPENAI_API_KEY for openai, or MCP_CRON_AI_API_KEY when using a base URL proxy. The value must be the API key for the active provider.
-
-When switching providers, ask the user for the new API key if one isn't already saved in config.json for that provider.
-
-**SECURITY — Adding or updating MCP servers:**
-When a user asks to add or update an MCP server, ALWAYS warn them about the risks before proceeding:
-1. MCP servers run locally with the same permissions as this app. A malicious or poorly written server can read/write files, execute commands, and access the network.
-2. Only install servers from trusted, well-known sources. Prefer official @modelcontextprotocol packages or servers listed on the official MCP servers directory.
-3. Before adding a server, you MUST verify it: check that the npm package or GitHub repo exists, read its README and source code, and confirm the code does what it claims. Be skeptical — GitHub stars, download counts, and commit activity can all be artificially inflated, so do not rely on these metrics as proof of trustworthiness.
-4. If you cannot verify the source, or the package looks suspicious (anonymous author, no documentation, no clear purpose, requests unnecessary permissions), warn the user strongly and recommend against installing it.
-5. Never add a server that asks for overly broad permissions or wants credentials beyond what its stated purpose requires.
-If the user insists on adding an unverified server after your warning, proceed but reiterate the risk.
-
-Help the user modify their configuration. When done, tell them they can close this chat panel.
-Note: Changes to config.json and mcp.json take effect on the next conversation. Only server port changes require a restart.`;
 
 export function createServer(app: Express) {
   const server = http.createServer(app);
@@ -238,6 +249,8 @@ export function createServer(app: Express) {
         conversationId?: string;
         attachments?: Array<{ fileId: string; filename: string; mimeType: string }>;
         setupMode?: boolean;
+        taskMode?: boolean;
+        taskContext?: string;
       };
       try {
         msg = JSON.parse(raw.toString());
@@ -259,6 +272,9 @@ export function createServer(app: Express) {
       const config = loadConfig();
       const mcpServers = loadMcpServers();
 
+      // Determine conversation mode: 0 = chat, 1 = setup, 2 = task
+      const mode = msg.taskMode ? 2 : msg.setupMode ? 1 : 0;
+
       // Get or create conversation
       let conversationId = msg.conversationId;
       let resumeSessionId: string | undefined;
@@ -272,7 +288,7 @@ export function createServer(app: Express) {
       }
 
       if (!conversationId) {
-        const conv = createConversation(config.provider, !!msg.setupMode);
+        const conv = createConversation(config.provider, mode);
         conversationId = conv.id;
         isNewConversation = true;
       }
@@ -316,7 +332,14 @@ export function createServer(app: Express) {
         const allMessages = getMessages(conversationId);
         const history = allMessages.slice(0, -1); // exclude the message we just saved
 
-        const systemPromptOverride = msg.setupMode ? SETUP_SYSTEM_PROMPT : undefined;
+        let systemPromptOverride: string | undefined;
+        if (mode === 1) {
+          systemPromptOverride = SETUP_SYSTEM_PROMPT;
+        } else if (mode === 2) {
+          systemPromptOverride = msg.taskContext
+            ? TASK_SYSTEM_PROMPT + msg.taskContext
+            : TASK_CREATE_SYSTEM_PROMPT;
+        }
 
         let responseText = "";
         const result = await routeMessage(

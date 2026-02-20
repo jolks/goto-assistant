@@ -2,6 +2,37 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { loadMcpServers } from "./config.js";
 
 let cronProc: ChildProcess | null = null;
+// IDs 1-99 reserved for startup handshake (currently: 1=initialize, 2=list_tasks).
+// callCronTool() allocates from 100+ to avoid collisions.
+let nextId = 100;
+
+export function isCronRunning(): boolean {
+  return cronProc !== null;
+}
+
+/**
+ * Call an mcp-cron tool by name with the given arguments.
+ * Returns the parsed JSON result, or raw string if not valid JSON.
+ */
+export async function callCronTool(toolName: string, args: Record<string, unknown> = {}): Promise<unknown> {
+  if (!cronProc) throw new Error("mcp-cron is not running");
+  const id = nextId++;
+  send(cronProc, {
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: { name: toolName, arguments: args },
+  });
+  const response = await waitForResponse(cronProc, id);
+  const result = response.result as { content?: Array<{ type: string; text: string }> } | undefined;
+  const text = result?.content?.[0]?.text;
+  if (!text) return result;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
 
 /**
  * Send a JSON-RPC message to an MCP server over stdio.

@@ -16,17 +16,7 @@ var setupChatState = {
 };
 
 function addMessage(role, text) {
-  var container = document.getElementById('chatMessages');
-  var div = document.createElement('div');
-  div.className = 'message ' + role;
-  if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
-    div.innerHTML = DOMPurify.sanitize(marked.parse(text));
-  } else {
-    div.textContent = text;
-  }
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  return div;
+  return chatAddMessage('chatMessages', role, text);
 }
 
 function showChoices(options, onSelect) {
@@ -122,76 +112,61 @@ async function saveSetupConfig(provider, apiKey, model, baseUrl, mcpServers) {
 }
 
 function addSetupTypingIndicator() {
-  var container = document.getElementById('chatMessages');
-  var el = document.createElement('div');
-  el.className = 'typing-indicator';
-  el.id = 'setupTyping';
-  el.innerHTML = '<span></span><span></span><span></span>';
-  container.appendChild(el);
-  container.scrollTop = container.scrollHeight;
+  chatAddTypingIndicator('chatMessages', 'setupTyping');
 }
 
 function removeSetupTypingIndicator() {
-  var el = document.getElementById('setupTyping');
-  if (el) el.remove();
+  chatRemoveTypingIndicator('setupTyping');
 }
 
 function connectAiChat() {
-  var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  var ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
-  setupChatState.ws = ws;
-
-  ws.addEventListener('message', function (event) {
-    var msg = JSON.parse(event.data);
-    if (msg.type === 'chunk') {
-      removeSetupTypingIndicator();
-      setupChatState.streamingText += msg.text;
-      if (!setupChatState.streamingEl) {
-        setupChatState.streamingEl = addMessage('assistant', '');
-      }
-      if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
-        setupChatState.streamingEl.innerHTML = DOMPurify.sanitize(marked.parse(setupChatState.streamingText));
-      } else {
-        setupChatState.streamingEl.textContent = setupChatState.streamingText;
-      }
-      var container = document.getElementById('chatMessages');
-      container.scrollTop = container.scrollHeight;
-    } else if (msg.type === 'done') {
-      removeSetupTypingIndicator();
-      setupChatState.conversationId = msg.conversationId;
-      setupChatState.streamingText = '';
-      setupChatState.streamingEl = null;
-      setInputMode('text');
-      // Refresh form after AI response to pick up any config changes
-      if (typeof window.refreshForm === 'function') {
-        window.refreshForm();
-      }
-    } else if (msg.type === 'error') {
-      removeSetupTypingIndicator();
-      addMessage('assistant', 'Error: ' + msg.text);
-      setInputMode('text');
-    }
-  });
-
-  ws.addEventListener('error', function () {
-    addMessage('assistant', 'Connection error. Please check your network and refresh the page.');
-  });
-
-  ws.addEventListener('close', function () {
-    setupChatState.ws = null;
-    if (setupChatState.current === 'ai_chat') {
-      addMessage('assistant', 'Reconnecting...');
-      setTimeout(function () {
-        var indicator = document.querySelector('#chatMessages .message.assistant:last-child');
-        if (indicator && indicator.textContent === 'Reconnecting...') {
-          indicator.remove();
+  return chatCreateWs({
+    onMessage: function (event) {
+      var msg = JSON.parse(event.data);
+      if (msg.type === 'chunk') {
+        removeSetupTypingIndicator();
+        setupChatState.streamingText += msg.text;
+        if (!setupChatState.streamingEl) {
+          setupChatState.streamingEl = addMessage('assistant', '');
         }
-        connectAiChat();
-      }, 2000);
-    }
+        if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
+          setupChatState.streamingEl.innerHTML = DOMPurify.sanitize(marked.parse(setupChatState.streamingText));
+        } else {
+          setupChatState.streamingEl.textContent = setupChatState.streamingText;
+        }
+        var container = document.getElementById('chatMessages');
+        container.scrollTop = container.scrollHeight;
+      } else if (msg.type === 'done') {
+        removeSetupTypingIndicator();
+        setupChatState.conversationId = msg.conversationId;
+        setupChatState.streamingText = '';
+        setupChatState.streamingEl = null;
+        setInputMode('text');
+        // Refresh form after AI response to pick up any config changes
+        if (typeof window.refreshForm === 'function') {
+          window.refreshForm();
+        }
+      } else if (msg.type === 'error') {
+        removeSetupTypingIndicator();
+        addMessage('assistant', 'Error: ' + msg.text);
+        setInputMode('text');
+      }
+    },
+    onOpen: function (ws) {
+      setupChatState.ws = ws;
+    },
+    onError: function () {
+      addMessage('assistant', 'Connection error. Please check your network and refresh the page.');
+    },
+    onClose: function (closedWs) {
+      if (setupChatState.ws === closedWs) {
+        setupChatState.ws = null;
+      }
+    },
+    shouldReconnect: function () {
+      return setupChatState.current === 'ai_chat';
+    },
   });
-
-  return ws;
 }
 
 function sendAiMessage(text) {

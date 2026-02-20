@@ -1,31 +1,15 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-
-vi.hoisted(() => {
-  process.env.GOTO_DATA_DIR = "tests/data";
-});
-
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import path from "node:path";
 import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
-
-const CONFIG_PATH = path.join(DATA_DIR, "config.json");
-
-const testConfig: Config = {
-  provider: "claude",
-  claude: { apiKey: "sk-ant-test123456", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
-  openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "" },
-  server: { port: 3000 },
-};
+import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
 
 describe("config", () => {
   beforeEach(() => {
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
+    cleanupConfigFiles();
   });
 
   afterEach(() => {
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
+    cleanupConfigFiles();
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.PORT;
