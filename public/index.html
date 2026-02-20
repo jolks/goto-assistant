@@ -99,31 +99,36 @@
     let pendingFiles = []; // Files selected but not yet sent
 
     function connectWs() {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${protocol}//${location.host}/ws`);
-      ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'chunk') {
-          if (!currentAssistantEl) {
-            currentAssistantEl = addMessage('assistant', '');
-            currentAssistantEl._raw = '';
+      chatCreateWs({
+        onMessage: function (e) {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'chunk') {
+            if (!currentAssistantEl) {
+              currentAssistantEl = addMessage('assistant', '');
+              currentAssistantEl._raw = '';
+            }
+            currentAssistantEl._raw += msg.text;
+            const textDiv = currentAssistantEl.lastElementChild;
+            if (textDiv) textDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAssistantEl._raw));
+          } else if (msg.type === 'done') {
+            currentConversationId = msg.conversationId;
+            currentAssistantEl = null;
+            removeTypingIndicator();
+            loadConversations();
+          } else if (msg.type === 'error') {
+            removeTypingIndicator();
+            currentAssistantEl = null;
+            addMessage('assistant', 'Error: ' + msg.text);
           }
-          currentAssistantEl._raw += msg.text;
-          // Update only the text div (last child)
-          const textDiv = currentAssistantEl.lastElementChild;
-          if (textDiv) textDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentAssistantEl._raw));
-        } else if (msg.type === 'done') {
-          currentConversationId = msg.conversationId;
-          currentAssistantEl = null;
-          removeTypingIndicator();
-          loadConversations();
-        } else if (msg.type === 'error') {
-          removeTypingIndicator();
-          currentAssistantEl = null;
-          addMessage('assistant', 'Error: ' + msg.text);
-        }
-      };
-      ws.onclose = () => { setTimeout(connectWs, 2000); };
+        },
+        onOpen: function (newWs) {
+          ws = newWs;
+        },
+        onClose: function (closedWs) {
+          if (ws === closedWs) ws = null;
+        },
+        shouldReconnect: function () { return true; },
+      });
     }
 
     function parseContent(content) {

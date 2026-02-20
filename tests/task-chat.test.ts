@@ -12,10 +12,11 @@ vi.hoisted(() => {
   };
 });
 
-import { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator } from "../public/chat-core.js";
+import { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator, chatCreateWs } from "../public/chat-core.js";
 (globalThis as Record<string, unknown>).chatAddMessage = chatAddMessage;
 (globalThis as Record<string, unknown>).chatAddTypingIndicator = chatAddTypingIndicator;
 (globalThis as Record<string, unknown>).chatRemoveTypingIndicator = chatRemoveTypingIndicator;
+(globalThis as Record<string, unknown>).chatCreateWs = chatCreateWs;
 
 import {
   taskChatState,
@@ -41,6 +42,7 @@ function resetState() {
   taskChatState.taskContext = null;
   taskChatState.streamingText = "";
   taskChatState.streamingEl = null;
+  taskChatState.active = false;
 }
 
 describe("task-chat", () => {
@@ -130,15 +132,13 @@ describe("task-chat", () => {
 
   describe("initTaskChat", () => {
     beforeEach(() => {
-      // Mock WebSocket constructor
+      // Mock chatCreateWs so it returns a fake ws and captures callbacks
       const mockWs = {
-        addEventListener: vi.fn(),
         close: vi.fn(),
         readyState: WebSocket.OPEN,
         send: vi.fn(),
       };
-      vi.stubGlobal("WebSocket", vi.fn(() => mockWs));
-      vi.stubGlobal("location", { protocol: "http:", host: "localhost:3000" });
+      vi.stubGlobal("chatCreateWs", vi.fn(() => mockWs));
     });
 
     it("shows creation welcome when context is null", () => {
@@ -165,22 +165,30 @@ describe("task-chat", () => {
       expect(msgs).toHaveLength(1);
       expect(msgs[0].classList.contains("assistant")).toBe(true);
     });
+
+    it("sets active flag to true", () => {
+      initTaskChat(null);
+      expect(taskChatState.active).toBe(true);
+    });
   });
 
   describe("disconnectTaskChat", () => {
-    it("closes WS and sets to null", () => {
+    it("closes WS, sets to null, and clears active flag", () => {
       const mockClose = vi.fn();
       taskChatState.ws = { close: mockClose } as unknown as WebSocket;
+      taskChatState.active = true;
 
       disconnectTaskChat();
 
       expect(mockClose).toHaveBeenCalledOnce();
       expect(taskChatState.ws).toBeNull();
+      expect(taskChatState.active).toBe(false);
     });
 
     it("is safe when ws is already null", () => {
       taskChatState.ws = null;
       expect(() => disconnectTaskChat()).not.toThrow();
+      expect(taskChatState.active).toBe(false);
     });
   });
 });

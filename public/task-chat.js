@@ -7,6 +7,7 @@ var taskChatState = {
   taskContext: null, // null = creation mode, string = existing task context
   streamingText: '',
   streamingEl: null,
+  active: false, // true while a task chat panel is open; drives reconnect
 };
 
 function taskChatAddMessage(role, text) {
@@ -22,52 +23,52 @@ function removeTaskTypingIndicator() {
 }
 
 function connectTaskChat() {
-  var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  var ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
-  taskChatState.ws = ws;
-
-  ws.addEventListener('message', function (event) {
-    var msg = JSON.parse(event.data);
-    if (msg.type === 'chunk') {
-      removeTaskTypingIndicator();
-      taskChatState.streamingText += msg.text;
-      if (!taskChatState.streamingEl) {
-        taskChatState.streamingEl = taskChatAddMessage('assistant', '');
-      }
-      if (taskChatState.streamingEl) {
-        if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
-          taskChatState.streamingEl.innerHTML = DOMPurify.sanitize(marked.parse(taskChatState.streamingText));
-        } else {
-          taskChatState.streamingEl.textContent = taskChatState.streamingText;
+  return chatCreateWs({
+    onMessage: function (event) {
+      var msg = JSON.parse(event.data);
+      if (msg.type === 'chunk') {
+        removeTaskTypingIndicator();
+        taskChatState.streamingText += msg.text;
+        if (!taskChatState.streamingEl) {
+          taskChatState.streamingEl = taskChatAddMessage('assistant', '');
         }
-        var container = document.getElementById('taskChatMessages');
-        if (container) container.scrollTop = container.scrollHeight;
+        if (taskChatState.streamingEl) {
+          if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
+            taskChatState.streamingEl.innerHTML = DOMPurify.sanitize(marked.parse(taskChatState.streamingText));
+          } else {
+            taskChatState.streamingEl.textContent = taskChatState.streamingText;
+          }
+          var container = document.getElementById('taskChatMessages');
+          if (container) container.scrollTop = container.scrollHeight;
+        }
+      } else if (msg.type === 'done') {
+        removeTaskTypingIndicator();
+        taskChatState.conversationId = msg.conversationId;
+        taskChatState.streamingText = '';
+        taskChatState.streamingEl = null;
+        setTaskInputEnabled(true);
+        if (typeof window.onTaskChatDone === 'function') {
+          window.onTaskChatDone();
+        }
+      } else if (msg.type === 'error') {
+        removeTaskTypingIndicator();
+        taskChatAddMessage('assistant', 'Error: ' + msg.text);
+        setTaskInputEnabled(true);
       }
-    } else if (msg.type === 'done') {
-      removeTaskTypingIndicator();
-      taskChatState.conversationId = msg.conversationId;
-      taskChatState.streamingText = '';
-      taskChatState.streamingEl = null;
+    },
+    onOpen: function (ws) {
+      taskChatState.ws = ws;
       setTaskInputEnabled(true);
-      if (typeof window.onTaskChatDone === 'function') {
-        window.onTaskChatDone();
+    },
+    onClose: function (closedWs) {
+      if (taskChatState.ws === closedWs) {
+        taskChatState.ws = null;
       }
-    } else if (msg.type === 'error') {
-      removeTaskTypingIndicator();
-      taskChatAddMessage('assistant', 'Error: ' + msg.text);
-      setTaskInputEnabled(true);
-    }
+    },
+    shouldReconnect: function () {
+      return taskChatState.active;
+    },
   });
-
-  ws.addEventListener('open', function () {
-    setTaskInputEnabled(true);
-  });
-
-  ws.addEventListener('close', function () {
-    taskChatState.ws = null;
-  });
-
-  return ws;
 }
 
 function setTaskInputEnabled(enabled) {
@@ -118,12 +119,16 @@ function initTaskChat(taskContext) {
   // Close existing connection
   disconnectTaskChat();
 
+  // Mark active so reconnect logic kicks in
+  taskChatState.active = true;
+
   // Connect — input is enabled by the WS 'open' event handler
   setTaskInputEnabled(false);
   connectTaskChat();
 }
 
 function disconnectTaskChat() {
+  taskChatState.active = false;
   if (taskChatState.ws) {
     taskChatState.ws.close();
     taskChatState.ws = null;

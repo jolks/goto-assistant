@@ -48,6 +48,32 @@ function chatRemoveTypingIndicator(indicatorId) {
   if (el) el.remove();
 }
 
+/**
+ * Create a WebSocket connection with auto-reconnect support.
+ * All chat surfaces should use this instead of creating WebSockets directly.
+ * @param {Object} callbacks
+ * @param {function} callbacks.onMessage - Called with each MessageEvent
+ * @param {function} [callbacks.onOpen] - Called with the new ws when connection opens
+ * @param {function} [callbacks.onClose] - Called with the specific ws that closed (stale-WS guard)
+ * @param {function} [callbacks.shouldReconnect] - Return true to auto-reconnect after 2s
+ * @returns {WebSocket}
+ */
+function chatCreateWs(callbacks) {
+  var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
+  ws.addEventListener('message', callbacks.onMessage);
+  ws.addEventListener('open', function () {
+    if (callbacks.onOpen) callbacks.onOpen(ws);
+  });
+  ws.addEventListener('close', function () {
+    if (callbacks.onClose) callbacks.onClose(ws);
+    if (callbacks.shouldReconnect && callbacks.shouldReconnect()) {
+      setTimeout(function () { chatCreateWs(callbacks); }, 2000);
+    }
+  });
+  return ws;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator };
+  module.exports = { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator, chatCreateWs };
 }
