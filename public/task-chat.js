@@ -192,7 +192,7 @@ function runTask(taskId, runBtn, renderTaskResult, formatDuration, getCurrentTas
               var output = result.output || result.error || result.result || '(no output)';
               var duration = formatDuration(result.start_time, result.end_time);
               var status = isError ? 'Failed' : 'OK';
-              var chatText = '**Task executed \u2014 ' + status + '**' + (duration ? ' (' + duration + ')' : '') + '\n```\n' + (typeof output === 'string' ? output : JSON.stringify(output, null, 2)) + '\n```';
+              var chatText = '**Task executed \u2014 ' + status + '**' + (duration ? ' (' + duration + ')' : '') + '\n\n' + (typeof output === 'string' ? output : JSON.stringify(output, null, 2));
 
               if (getCurrentTaskId && getCurrentTaskId() === taskId) {
                 taskChatAddMessage('assistant', chatText);

@@ -536,11 +536,15 @@
       toggleBtn.title = task.enabled ? 'Disable' : 'Enable';
       toggleBtn.style.color = task.enabled ? '#22c55e' : '';
 
-      if (isTaskRunning(task.id)) {
+      if (!task.enabled) {
+        runBtn.style.display = 'none';
+      } else if (isTaskRunning(task.id)) {
+        runBtn.style.display = '';
         runBtn.disabled = true;
         runBtn.innerHTML = '&#9696;';
         runBtn.classList.add('task-running');
       } else {
+        runBtn.style.display = '';
         runBtn.disabled = false;
         runBtn.innerHTML = '&#9654;';
         runBtn.classList.remove('task-running');
@@ -584,9 +588,13 @@
         const status = isError ? 'error' : 'success';
         const output = r.output || r.error || r.result || '(no output)';
         const duration = formatDuration(r.start_time, r.end_time);
+        const outputText = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+        const renderedOutput = (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined')
+          ? DOMPurify.sanitize(marked.parse(outputText))
+          : escapeHtml(outputText);
         html += `<div class="task-result-item">
           <div class="task-result-header"><span class="task-result-time">${escapeHtml(time)}${duration ? ' &middot; ' + escapeHtml(duration) : ''}</span><span class="task-result-status ${status}">${isError ? 'Failed' : 'OK'}</span></div>
-          <pre class="task-result-output">${escapeHtml(typeof output === 'string' ? output : JSON.stringify(output, null, 2))}</pre>
+          <div class="task-result-output">${renderedOutput}</div>
         </div>`;
       });
       container.innerHTML = html;

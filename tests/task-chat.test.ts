@@ -314,6 +314,7 @@ describe("task-chat", () => {
       // Pending result should be stored
       expect(taskRunState["t1"]).toBeDefined();
       expect(taskRunState["t1"].pendingResult).toContain("bg result");
+      expect(taskRunState["t1"].pendingResult).not.toContain('```');
 
       // consumePendingResult retrieves it
       const pending = consumePendingResult("t1");
