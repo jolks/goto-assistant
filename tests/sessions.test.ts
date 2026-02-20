@@ -6,6 +6,7 @@ vi.hoisted(() => {
 
 import fs from "node:fs";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { DATA_DIR } from "../src/config.js";
 import {
   getDb,
@@ -122,6 +123,57 @@ describe("sessions", () => {
     expect(list).toHaveLength(1);
     // Only the regular conversation should be returned
     expect(list[0].provider).toBe("claude");
+  });
+
+  it("createConversation defaults mode to 0", () => {
+    const conv = createConversation("claude");
+    const row = getDb().prepare("SELECT mode FROM conversations WHERE id = ?").get(conv.id) as { mode: number };
+    expect(row.mode).toBe(0);
+  });
+
+  it("createConversation stores mode=2 for task conversations", () => {
+    const conv = createConversation("claude", 2);
+    const row = getDb().prepare("SELECT mode FROM conversations WHERE id = ?").get(conv.id) as { mode: number };
+    expect(row.mode).toBe(2);
+  });
+
+  it("migrates setup column to mode", () => {
+    // Manually create a DB with old 'setup' column schema
+    const dbPath = path.join(DATA_DIR, "sessions.db");
+    const rawDb = new Database(dbPath);
+    rawDb.exec(`
+      CREATE TABLE conversations (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        sdk_session_id TEXT,
+        title TEXT,
+        setup INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    rawDb.exec(`
+      CREATE TABLE messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    rawDb.prepare("INSERT INTO conversations (id, provider, setup, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))").run("old-conv", "claude", 1);
+    rawDb.close();
+
+    // Now let getDb() re-open and migrate
+    const db = getDb();
+    const cols = db.pragma("table_info(conversations)") as Array<{ name: string }>;
+    const colNames = cols.map((c) => c.name);
+    expect(colNames).toContain("mode");
+    expect(colNames).not.toContain("setup");
+
+    // Verify data was preserved
+    const row = db.prepare("SELECT mode FROM conversations WHERE id = ?").get("old-conv") as { mode: number };
+    expect(row.mode).toBe(1);
   });
 
   it("deletes a conversation and its messages", () => {
