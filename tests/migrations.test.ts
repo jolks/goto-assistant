@@ -1,32 +1,16 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-
-vi.hoisted(() => {
-  process.env.GOTO_DATA_DIR = "tests/data";
-});
-
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import { saveConfig, loadConfig, saveMcpServers, loadMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
+import { saveConfig, loadConfig, saveMcpServers, loadMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { runMigrations, CURRENT_CONFIG_VERSION } from "../src/migrations.js";
-import path from "node:path";
-
-const CONFIG_PATH = path.join(DATA_DIR, "config.json");
-
-const baseConfig: Config = {
-  provider: "claude",
-  claude: { apiKey: "sk-ant-test123456", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
-  openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "" },
-  server: { port: 3000 },
-};
+import { testConfig as baseConfig, cleanupConfigFiles } from "./helpers.js";
 
 describe("migrations", () => {
   beforeEach(() => {
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
+    cleanupConfigFiles();
   });
 
   afterEach(() => {
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
+    cleanupConfigFiles();
   });
 
   it("skips when not configured", () => {

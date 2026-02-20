@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-
-// Set test data dir before importing modules
-process.env.GOTO_DATA_DIR = "tests/data";
-
 import { saveUpload, getUpload, UPLOADS_DIR, ALLOWED_IMAGE_TYPES } from "../src/uploads.js";
 
 describe("uploads", () => {

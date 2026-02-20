@@ -2,7 +2,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// Provide marked + DOMPurify globals before task-chat.js is imported
+// Provide marked + DOMPurify + chat-core globals before task-chat.js is imported
 vi.hoisted(() => {
   (globalThis as Record<string, unknown>).marked = {
     parse: (text: string) => `<p>${text}</p>`,
@@ -11,6 +11,11 @@ vi.hoisted(() => {
     sanitize: (html: string) => html,
   };
 });
+
+import { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator } from "../public/chat-core.js";
+(globalThis as Record<string, unknown>).chatAddMessage = chatAddMessage;
+(globalThis as Record<string, unknown>).chatAddTypingIndicator = chatAddTypingIndicator;
+(globalThis as Record<string, unknown>).chatRemoveTypingIndicator = chatRemoveTypingIndicator;
 
 import {
   taskChatState,
@@ -45,52 +50,19 @@ describe("task-chat", () => {
   });
 
   describe("taskChatAddMessage", () => {
-    it("adds a user message to the container", () => {
-      taskChatAddMessage("user", "Hello");
-      const msgs = document.querySelectorAll("#taskChatMessages .message");
-      expect(msgs).toHaveLength(1);
-      expect(msgs[0].classList.contains("user")).toBe(true);
-      expect(msgs[0].innerHTML).toContain("Hello");
-    });
-
-    it("adds an assistant message with markdown rendering", () => {
-      taskChatAddMessage("assistant", "**bold**");
-      const msgs = document.querySelectorAll("#taskChatMessages .message");
-      expect(msgs).toHaveLength(1);
-      expect(msgs[0].classList.contains("assistant")).toBe(true);
-      expect(msgs[0].innerHTML).toContain("**bold**");
-    });
-
-    it("returns null when container is missing", () => {
-      document.body.innerHTML = "";
-      const result = taskChatAddMessage("user", "test");
-      expect(result).toBeNull();
-    });
-
-    it("returns the created element", () => {
-      const el = taskChatAddMessage("user", "test");
+    it("delegates to chatAddMessage with correct container", () => {
+      const el = taskChatAddMessage("user", "Hello");
       expect(el).toBeInstanceOf(HTMLElement);
-      expect(el!.className).toBe("message user");
+      expect(document.querySelectorAll("#taskChatMessages .message")).toHaveLength(1);
     });
   });
 
   describe("typing indicator", () => {
-    it("adds typing indicator with 3 spans", () => {
-      addTaskTypingIndicator();
-      const indicator = document.getElementById("taskTyping");
-      expect(indicator).not.toBeNull();
-      expect(indicator!.querySelectorAll("span")).toHaveLength(3);
-    });
-
-    it("removes typing indicator", () => {
+    it("delegates to chatAddTypingIndicator/chatRemoveTypingIndicator", () => {
       addTaskTypingIndicator();
       expect(document.getElementById("taskTyping")).not.toBeNull();
       removeTaskTypingIndicator();
       expect(document.getElementById("taskTyping")).toBeNull();
-    });
-
-    it("is safe when no indicator exists", () => {
-      expect(() => removeTaskTypingIndicator()).not.toThrow();
     });
   });
 

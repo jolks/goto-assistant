@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <script src="/chat-core.js"></script>
   <script src="/task-chat.js"></script>
 </head>
 <body>
@@ -178,17 +179,11 @@
     }
 
     function addTypingIndicator() {
-      const el = document.createElement('div');
-      el.className = 'typing-indicator';
-      el.id = 'typing';
-      el.innerHTML = '<span></span><span></span><span></span>';
-      document.getElementById('messages').appendChild(el);
-      el.scrollIntoView({ behavior: 'smooth' });
+      chatAddTypingIndicator('messages', 'typing');
     }
 
     function removeTypingIndicator() {
-      const el = document.getElementById('typing');
-      if (el) el.remove();
+      chatRemoveTypingIndicator('typing');
     }
 
     async function sendMessage() {

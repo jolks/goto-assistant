@@ -11,6 +11,11 @@ vi.hoisted(() => {
   };
 });
 
+import { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator } from "../public/chat-core.js";
+(globalThis as Record<string, unknown>).chatAddMessage = chatAddMessage;
+(globalThis as Record<string, unknown>).chatAddTypingIndicator = chatAddTypingIndicator;
+(globalThis as Record<string, unknown>).chatRemoveTypingIndicator = chatRemoveTypingIndicator;
+
 import { buildCronConfig } from "../public/cron-sync.js";
 import {
   defaultServers,

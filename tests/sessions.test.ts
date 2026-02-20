@@ -1,10 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-
-vi.hoisted(() => {
-  process.env.GOTO_DATA_DIR = "tests/data";
-});
-
-import fs from "node:fs";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { DATA_DIR } from "../src/config.js";
@@ -20,22 +14,17 @@ import {
   deleteConversation,
   closeDb,
 } from "../src/sessions.js";
-
-const DB_PATH = path.join(DATA_DIR, "sessions.db");
+import { cleanupDbFiles } from "./helpers.js";
 
 describe("sessions", () => {
   beforeEach(() => {
     closeDb();
-    if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-    if (fs.existsSync(DB_PATH + "-wal")) fs.unlinkSync(DB_PATH + "-wal");
-    if (fs.existsSync(DB_PATH + "-shm")) fs.unlinkSync(DB_PATH + "-shm");
+    cleanupDbFiles();
   });
 
   afterEach(() => {
     closeDb();
-    if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-    if (fs.existsSync(DB_PATH + "-wal")) fs.unlinkSync(DB_PATH + "-wal");
-    if (fs.existsSync(DB_PATH + "-shm")) fs.unlinkSync(DB_PATH + "-shm");
+    cleanupDbFiles();
   });
 
   it("creates a conversation and retrieves it", () => {

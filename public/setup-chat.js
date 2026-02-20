@@ -16,17 +16,7 @@ var setupChatState = {
 };
 
 function addMessage(role, text) {
-  var container = document.getElementById('chatMessages');
-  var div = document.createElement('div');
-  div.className = 'message ' + role;
-  if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
-    div.innerHTML = DOMPurify.sanitize(marked.parse(text));
-  } else {
-    div.textContent = text;
-  }
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  return div;
+  return chatAddMessage('chatMessages', role, text);
 }
 
 function showChoices(options, onSelect) {
@@ -122,18 +112,11 @@ async function saveSetupConfig(provider, apiKey, model, baseUrl, mcpServers) {
 }
 
 function addSetupTypingIndicator() {
-  var container = document.getElementById('chatMessages');
-  var el = document.createElement('div');
-  el.className = 'typing-indicator';
-  el.id = 'setupTyping';
-  el.innerHTML = '<span></span><span></span><span></span>';
-  container.appendChild(el);
-  container.scrollTop = container.scrollHeight;
+  chatAddTypingIndicator('chatMessages', 'setupTyping');
 }
 
 function removeSetupTypingIndicator() {
-  var el = document.getElementById('setupTyping');
-  if (el) el.remove();
+  chatRemoveTypingIndicator('setupTyping');
 }
 
 function connectAiChat() {

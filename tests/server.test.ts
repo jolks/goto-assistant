@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import path from "node:path";
-
-vi.hoisted(() => {
-  process.env.GOTO_DATA_DIR = "tests/data";
-});
 
 // Mock agent modules to avoid real SDK calls
 vi.mock("../src/agents/claude.js", () => ({
@@ -22,35 +17,22 @@ vi.mock("../src/cron.js", () => ({
 
 import { createApp } from "../src/server.js";
 import { stopCronServer, isCronRunning, callCronTool } from "../src/cron.js";
-import { saveConfig, saveMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config } from "../src/config.js";
+import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
 import { UPLOADS_DIR } from "../src/uploads.js";
-
-const CONFIG_PATH = path.join(DATA_DIR, "config.json");
-const DB_PATH = path.join(DATA_DIR, "sessions.db");
-
-const testConfig: Config = {
-  provider: "claude",
-  claude: { apiKey: "sk-ant-test123456", model: "claude-sonnet-4-5-20250929", baseUrl: "" },
-  openai: { apiKey: "sk-test789", model: "gpt-4o", baseUrl: "" },
-  server: { port: 3000 },
-};
+import { CONFIG_PATH, testConfig, cleanupConfigFiles, cleanupDbFiles } from "./helpers.js";
 
 describe("server", () => {
   beforeEach(() => {
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
+    cleanupConfigFiles();
   });
 
   afterEach(async () => {
     await stopCronServer();
     closeDb();
-    if (fs.existsSync(CONFIG_PATH)) fs.unlinkSync(CONFIG_PATH);
-    if (fs.existsSync(MCP_CONFIG_PATH)) fs.unlinkSync(MCP_CONFIG_PATH);
-    for (const f of [DB_PATH, DB_PATH + "-wal", DB_PATH + "-shm"]) {
-      if (fs.existsSync(f)) fs.unlinkSync(f);
-    }
+    cleanupConfigFiles();
+    cleanupDbFiles();
     if (fs.existsSync(UPLOADS_DIR)) fs.rmSync(UPLOADS_DIR, { recursive: true });
   });
 
@@ -237,7 +219,7 @@ describe("server", () => {
 
       // Backend should resolve the real OpenAI key from config.json
       const saved = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, "utf-8"));
-      expect(saved.mcpServers.cron.env.OPENAI_API_KEY).toBe("sk-test789");
+      expect(saved.mcpServers.cron.env.OPENAI_API_KEY).toBe("sk-openai-test789");
     } finally {
       if (savedAnthropicKey) process.env.ANTHROPIC_API_KEY = savedAnthropicKey;
       if (savedOpenaiKey) process.env.OPENAI_API_KEY = savedOpenaiKey;

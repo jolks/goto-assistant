@@ -10,34 +10,15 @@ var taskChatState = {
 };
 
 function taskChatAddMessage(role, text) {
-  var container = document.getElementById('taskChatMessages');
-  if (!container) return null;
-  var div = document.createElement('div');
-  div.className = 'message ' + role;
-  if (typeof marked !== 'undefined' && marked.parse && typeof DOMPurify !== 'undefined') {
-    div.innerHTML = DOMPurify.sanitize(marked.parse(text));
-  } else {
-    div.textContent = text;
-  }
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  return div;
+  return chatAddMessage('taskChatMessages', role, text);
 }
 
 function addTaskTypingIndicator() {
-  var container = document.getElementById('taskChatMessages');
-  if (!container) return;
-  var el = document.createElement('div');
-  el.className = 'typing-indicator';
-  el.id = 'taskTyping';
-  el.innerHTML = '<span></span><span></span><span></span>';
-  container.appendChild(el);
-  container.scrollTop = container.scrollHeight;
+  chatAddTypingIndicator('taskChatMessages', 'taskTyping');
 }
 
 function removeTaskTypingIndicator() {
-  var el = document.getElementById('taskTyping');
-  if (el) el.remove();
+  chatRemoveTypingIndicator('taskTyping');
 }
 
 function connectTaskChat() {
