@@ -740,6 +740,14 @@ body {
   padding: 2px 6px;
   border-radius: 4px;
 }
+.task-schedule-human {
+  font-weight: 450;
+}
+.task-schedule-raw {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
 
 .task-enabled-badge {
   color: #22c55e; font-weight: 600; font-size: 12px;

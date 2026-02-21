@@ -1,6 +1,15 @@
 // task-chat.js — Inline chat logic for task mode (create/modify tasks via AI).
 // Loaded as a plain <script> in the browser; importable via require() in tests.
 
+function cronToHuman(expr) {
+  if (typeof cronstrue === 'undefined' || !expr) return null;
+  try {
+    return cronstrue.toString(expr);
+  } catch (e) {
+    return null;
+  }
+}
+
 var taskRunState = {};
 // Shape: { [taskId]: { pollTimer, timeoutTimer, runStartTime, pendingResult } }
 // pendingResult: null while running, string (chat text) when result arrived but user wasn't viewing this task
@@ -241,6 +250,7 @@ function disconnectTaskChat() {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    cronToHuman: cronToHuman,
     taskChatState: taskChatState,
     taskRunState: taskRunState,
     cancelTaskRun: cancelTaskRun,
