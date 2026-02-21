@@ -73,6 +73,7 @@
           <button class="btn-icon" id="taskToggleBtn" title="Enable/Disable"></button>
           <button class="btn-icon" id="taskDeleteBtn" title="Delete">&#128465;</button>
         </div>
+        <button class="task-chat-toggle" id="taskChatToggle" title="Chat">&#128172;</button>
       </div>
       <div class="task-detail-body">
         <div class="task-info" id="taskInfo">
@@ -80,7 +81,11 @@
           <div class="task-content" id="taskContent"></div>
           <div class="task-results" id="taskResults"></div>
         </div>
-        <div class="task-chat-panel">
+        <div class="task-chat-panel" id="taskChatPanel">
+          <div class="task-chat-header">
+            <h3>Task Chat</h3>
+            <button class="task-chat-close" id="taskChatClose">&times;</button>
+          </div>
           <div class="task-chat-messages" id="taskChatMessages"></div>
           <div class="task-chat-input">
             <div class="setup-chat-input-row">
@@ -415,6 +420,7 @@
     function showChatMain() {
       document.querySelector('.chat-main').style.display = '';
       document.getElementById('taskDetail').style.display = 'none';
+      document.getElementById('taskChatPanel').classList.remove('open');
       disconnectTaskChat();
     }
 
@@ -508,6 +514,7 @@
       document.getElementById('taskDetailTitle').textContent = task.name || task.id;
       document.getElementById('taskDetailActions').style.display = '';
       document.getElementById('taskInfo').style.display = '';
+      document.querySelector('.task-detail-body').classList.remove('create-mode');
 
       // Meta
       const meta = document.getElementById('taskMeta');
@@ -598,7 +605,7 @@
           ? DOMPurify.sanitize(marked.parse(outputText))
           : escapeHtml(outputText);
         html += `<div class="task-result-item">
-          <div class="task-result-header"><span class="task-result-time">${escapeHtml(time)}${duration ? ' &middot; ' + escapeHtml(duration) : ''}</span><span class="task-result-status ${status}">${isError ? 'Failed' : 'OK'}</span></div>
+          <div class="task-result-header"><span class="task-result-time">${escapeHtml(time)}</span><div class="task-result-header-right">${duration ? '<span class="task-result-duration">' + escapeHtml(duration) + '</span>' : ''}<span class="task-result-status ${status}">${isError ? 'Failed' : 'OK'}</span></div></div>
           <div class="task-result-output">${renderedOutput}</div>
         </div>`;
       });
@@ -612,6 +619,7 @@
       document.getElementById('taskDetailTitle').textContent = 'Create Task';
       document.getElementById('taskDetailActions').style.display = 'none';
       document.getElementById('taskInfo').style.display = 'none';
+      document.querySelector('.task-detail-body').classList.add('create-mode');
       showTaskDetail();
       initTaskChat(null);
     }
@@ -663,6 +671,14 @@
         input.value = '';
         sendTaskChatMessage(text);
       }
+    });
+
+    // Mobile task chat overlay toggle
+    document.getElementById('taskChatToggle').addEventListener('click', () => {
+      document.getElementById('taskChatPanel').classList.add('open');
+    });
+    document.getElementById('taskChatClose').addEventListener('click', () => {
+      document.getElementById('taskChatPanel').classList.remove('open');
     });
 
     connectWs();
