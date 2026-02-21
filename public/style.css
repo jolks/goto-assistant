@@ -1147,7 +1147,8 @@ body {
 
   .input-area { padding: 10px 12px 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   .input-row { max-width: 100%; border-radius: 16px; }
-  .input-row textarea { font-size: 16px; }
+  .input-row textarea,
+  .setup-chat-input-row textarea { font-size: 16px; }
 
   .conversation-item .delete-btn { display: inline-block; }
 
@@ -1159,6 +1160,9 @@ body {
   /* Shared mobile slide-in overlay */
   .mobile-slide-overlay {
     position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+    /* width: 100% is NOT redundant — it overrides explicit widths (e.g. .setup-chat 400px,
+       .task-chat-panel 360px) that would otherwise take priority over left/right: 0 */
+    width: 100%;
     background: var(--surface-0);
     transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1173,6 +1177,7 @@ body {
   /* Setup mobile */
   .setup-layout { flex-direction: column; }
   .setup-form { flex: 1; }
+  .setup-chat-input { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 }
 
 @media (min-width: 769px) {
