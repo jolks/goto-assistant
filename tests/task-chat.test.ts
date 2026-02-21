@@ -19,6 +19,7 @@ import { chatAddMessage, chatAddTypingIndicator, chatRemoveTypingIndicator, chat
 (globalThis as Record<string, unknown>).chatCreateWs = chatCreateWs;
 
 import {
+  cronToHuman,
   taskChatState,
   taskRunState,
   cancelTaskRun,
@@ -517,6 +518,42 @@ describe("task-chat", () => {
     it("sets active flag to true", () => {
       initTaskChat(null);
       expect(taskChatState.active).toBe(true);
+    });
+  });
+
+  describe("cronToHuman", () => {
+    it("returns null for null or undefined input", () => {
+      expect(cronToHuman(null)).toBeNull();
+      expect(cronToHuman(undefined)).toBeNull();
+      expect(cronToHuman("")).toBeNull();
+    });
+
+    it("returns null when cronstrue is not loaded", () => {
+      const saved = (globalThis as Record<string, unknown>).cronstrue;
+      delete (globalThis as Record<string, unknown>).cronstrue;
+      expect(cronToHuman("0 0 9 * * *")).toBeNull();
+      (globalThis as Record<string, unknown>).cronstrue = saved;
+    });
+
+    it("converts valid cron expressions to human-readable text", () => {
+      (globalThis as Record<string, unknown>).cronstrue = {
+        toString: (expr: string) => {
+          if (expr === "0 0 9 * * *") return "At 09:00 AM";
+          if (expr === "0 */5 * * * *") return "Every 5 minutes";
+          throw new Error("unknown");
+        },
+      };
+      expect(cronToHuman("0 0 9 * * *")).toBe("At 09:00 AM");
+      expect(cronToHuman("0 */5 * * * *")).toBe("Every 5 minutes");
+      delete (globalThis as Record<string, unknown>).cronstrue;
+    });
+
+    it("returns null for malformed expressions (cronstrue throws)", () => {
+      (globalThis as Record<string, unknown>).cronstrue = {
+        toString: () => { throw new Error("invalid cron"); },
+      };
+      expect(cronToHuman("not a cron")).toBeNull();
+      delete (globalThis as Record<string, unknown>).cronstrue;
     });
   });
 

@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>goto-assistant</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.3.1/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cronstrue@2.61.0/dist/cronstrue.min.js"></script>
   <script src="/chat-core.js"></script>
   <script src="/task-chat.js"></script>
 </head>
@@ -72,6 +73,7 @@
           <button class="btn-icon" id="taskToggleBtn" title="Enable/Disable"></button>
           <button class="btn-icon" id="taskDeleteBtn" title="Delete">&#128465;</button>
         </div>
+        <button class="task-chat-toggle" id="taskChatToggle" title="Chat">&#128172;</button>
       </div>
       <div class="task-detail-body">
         <div class="task-info" id="taskInfo">
@@ -79,7 +81,15 @@
           <div class="task-content" id="taskContent"></div>
           <div class="task-results" id="taskResults"></div>
         </div>
-        <div class="task-chat-panel">
+        <div class="task-create-empty" id="taskCreateEmpty">
+          <p>Describe the task you'd like to create</p>
+          <button class="task-create-empty-btn" id="taskCreateOpenChat">Start chatting &rarr;</button>
+        </div>
+        <div class="task-chat-panel mobile-slide-overlay" id="taskChatPanel">
+          <div class="task-chat-header">
+            <h3>Task Chat</h3>
+            <button class="task-chat-close" id="taskChatClose">&times;</button>
+          </div>
           <div class="task-chat-messages" id="taskChatMessages"></div>
           <div class="task-chat-input">
             <div class="setup-chat-input-row">
@@ -414,6 +424,7 @@
     function showChatMain() {
       document.querySelector('.chat-main').style.display = '';
       document.getElementById('taskDetail').style.display = 'none';
+      document.getElementById('taskChatPanel').classList.remove('open');
       disconnectTaskChat();
     }
 
@@ -507,14 +518,16 @@
       document.getElementById('taskDetailTitle').textContent = task.name || task.id;
       document.getElementById('taskDetailActions').style.display = '';
       document.getElementById('taskInfo').style.display = '';
+      document.querySelector('.task-detail-body').classList.remove('create-mode');
 
       // Meta
       const meta = document.getElementById('taskMeta');
+      const humanSchedule = task.schedule ? cronToHuman(task.schedule) : null;
       meta.innerHTML = `
         <div class="task-meta-row"><span class="task-meta-label">ID</span><span class="task-meta-value">${escapeHtml(task.id || '')}</span></div>
         <div class="task-meta-row"><span class="task-meta-label">Type</span><span class="task-meta-value"><span class="task-type-badge">${task.type === 'AI' ? 'AI' : 'CMD'}</span></span></div>
         <div class="task-meta-row"><span class="task-meta-label">Status</span><span class="task-meta-value">${task.enabled ? '<span class="task-enabled-badge">Enabled</span>' : '<span class="task-disabled-badge">Disabled</span>'}</span></div>
-        ${task.schedule ? `<div class="task-meta-row"><span class="task-meta-label">Schedule</span><span class="task-meta-value"><code>${escapeHtml(task.schedule)}</code></span></div>` : ''}
+        ${task.schedule ? `<div class="task-meta-row"><span class="task-meta-label">Schedule</span><span class="task-meta-value">${humanSchedule ? `<span class="task-schedule-human">${escapeHtml(humanSchedule)}</span> <code class="task-schedule-raw">${escapeHtml(task.schedule)}</code>` : `<code>${escapeHtml(task.schedule)}</code>`}</span></div>` : ''}
       `;
 
       // Content (prompt or command)
@@ -597,7 +610,7 @@
           ? DOMPurify.sanitize(marked.parse(outputText))
           : escapeHtml(outputText);
         html += `<div class="task-result-item">
-          <div class="task-result-header"><span class="task-result-time">${escapeHtml(time)}${duration ? ' &middot; ' + escapeHtml(duration) : ''}</span><span class="task-result-status ${status}">${isError ? 'Failed' : 'OK'}</span></div>
+          <div class="task-result-header"><span class="task-result-time">${escapeHtml(time)}</span><div class="task-result-header-right">${duration ? '<span class="task-result-duration">' + escapeHtml(duration) + '</span>' : ''}<span class="task-result-status ${status}">${isError ? 'Failed' : 'OK'}</span></div></div>
           <div class="task-result-output">${renderedOutput}</div>
         </div>`;
       });
@@ -611,8 +624,13 @@
       document.getElementById('taskDetailTitle').textContent = 'Create Task';
       document.getElementById('taskDetailActions').style.display = 'none';
       document.getElementById('taskInfo').style.display = 'none';
+      document.querySelector('.task-detail-body').classList.add('create-mode');
       showTaskDetail();
       initTaskChat(null);
+      // Auto-open chat overlay on mobile
+      if (window.matchMedia('(max-width: 768px)').matches) {
+        document.getElementById('taskChatPanel').classList.add('open');
+      }
     }
 
     // On task chat done, refresh task info without clearing chat messages
@@ -662,6 +680,17 @@
         input.value = '';
         sendTaskChatMessage(text);
       }
+    });
+
+    // Mobile task chat overlay toggle
+    document.getElementById('taskChatToggle').addEventListener('click', () => {
+      document.getElementById('taskChatPanel').classList.add('open');
+    });
+    document.getElementById('taskChatClose').addEventListener('click', () => {
+      document.getElementById('taskChatPanel').classList.remove('open');
+    });
+    document.getElementById('taskCreateOpenChat').addEventListener('click', () => {
+      document.getElementById('taskChatPanel').classList.add('open');
     });
 
     connectWs();
