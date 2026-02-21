@@ -628,7 +628,7 @@
       showTaskDetail();
       initTaskChat(null);
       // Auto-open chat overlay on mobile
-      if (window.innerWidth <= 768) {
+      if (window.matchMedia('(max-width: 768px)').matches) {
         document.getElementById('taskChatPanel').classList.add('open');
       }
     }

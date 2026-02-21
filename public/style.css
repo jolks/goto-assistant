@@ -178,6 +178,7 @@ body {
 .file-upload-btn, .file-preview-remove,
 .conversation-item .delete-btn,
 .setup-chat-close, .task-chat-close, .task-chat-toggle,
+.task-create-empty-btn,
 .sidebar-tab, .task-back-btn,
 .task-detail-actions .btn-icon {
   background: none; border: none; box-shadow: none;
@@ -932,21 +933,18 @@ body {
 .task-create-empty p { margin: 0; }
 .task-detail-body.create-mode .task-create-empty { display: flex; flex: 1; }
 .task-create-empty-btn {
-  background: var(--accent) !important;
-  color: #fff !important;
-  border: none !important;
-  border-radius: 12px !important;
-  padding: 10px 24px !important;
-  font-family: var(--font-body) !important;
-  font-weight: 600 !important;
-  font-size: 14px !important;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 24px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
   cursor: pointer;
   transition: all 0.15s ease;
-  box-shadow: none !important;
-  width: auto; margin-bottom: 0;
 }
 .task-create-empty-btn:hover {
-  background: var(--accent-hover) !important;
+  background: var(--accent-hover);
   transform: translateY(-1px);
 }
 @media (min-width: 769px) {
@@ -1161,7 +1159,6 @@ body {
   /* Shared mobile slide-in overlay */
   .mobile-slide-overlay {
     position: fixed; top: 0; right: 0; bottom: 0; left: 0;
-    width: 100%;
     background: var(--surface-0);
     transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
