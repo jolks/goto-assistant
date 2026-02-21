@@ -81,7 +81,11 @@
           <div class="task-content" id="taskContent"></div>
           <div class="task-results" id="taskResults"></div>
         </div>
-        <div class="task-chat-panel" id="taskChatPanel">
+        <div class="task-create-empty" id="taskCreateEmpty">
+          <p>Describe the task you'd like to create</p>
+          <button class="task-create-empty-btn" id="taskCreateOpenChat">Start chatting &rarr;</button>
+        </div>
+        <div class="task-chat-panel mobile-slide-overlay" id="taskChatPanel">
           <div class="task-chat-header">
             <h3>Task Chat</h3>
             <button class="task-chat-close" id="taskChatClose">&times;</button>
@@ -518,11 +522,12 @@
 
       // Meta
       const meta = document.getElementById('taskMeta');
+      const humanSchedule = task.schedule ? cronToHuman(task.schedule) : null;
       meta.innerHTML = `
         <div class="task-meta-row"><span class="task-meta-label">ID</span><span class="task-meta-value">${escapeHtml(task.id || '')}</span></div>
         <div class="task-meta-row"><span class="task-meta-label">Type</span><span class="task-meta-value"><span class="task-type-badge">${task.type === 'AI' ? 'AI' : 'CMD'}</span></span></div>
         <div class="task-meta-row"><span class="task-meta-label">Status</span><span class="task-meta-value">${task.enabled ? '<span class="task-enabled-badge">Enabled</span>' : '<span class="task-disabled-badge">Disabled</span>'}</span></div>
-        ${task.schedule ? `<div class="task-meta-row"><span class="task-meta-label">Schedule</span><span class="task-meta-value">${cronToHuman(task.schedule) ? `<span class="task-schedule-human">${escapeHtml(cronToHuman(task.schedule))}</span> <code class="task-schedule-raw">${escapeHtml(task.schedule)}</code>` : `<code>${escapeHtml(task.schedule)}</code>`}</span></div>` : ''}
+        ${task.schedule ? `<div class="task-meta-row"><span class="task-meta-label">Schedule</span><span class="task-meta-value">${humanSchedule ? `<span class="task-schedule-human">${escapeHtml(humanSchedule)}</span> <code class="task-schedule-raw">${escapeHtml(task.schedule)}</code>` : `<code>${escapeHtml(task.schedule)}</code>`}</span></div>` : ''}
       `;
 
       // Content (prompt or command)
@@ -622,6 +627,10 @@
       document.querySelector('.task-detail-body').classList.add('create-mode');
       showTaskDetail();
       initTaskChat(null);
+      // Auto-open chat overlay on mobile
+      if (window.innerWidth <= 768) {
+        document.getElementById('taskChatPanel').classList.add('open');
+      }
     }
 
     // On task chat done, refresh task info without clearing chat messages
@@ -679,6 +688,9 @@
     });
     document.getElementById('taskChatClose').addEventListener('click', () => {
       document.getElementById('taskChatPanel').classList.remove('open');
+    });
+    document.getElementById('taskCreateOpenChat').addEventListener('click', () => {
+      document.getElementById('taskChatPanel').classList.add('open');
     });
 
     connectWs();
