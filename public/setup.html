@@ -52,6 +52,25 @@
           <label for="port">Server Port</label>
           <input type="number" id="port" value="3000">
 
+          <fieldset>
+            <legend>WhatsApp</legend>
+            <label>
+              <input type="checkbox" id="waEnabled" role="switch">
+              Enable WhatsApp integration
+            </label>
+            <div id="waControls" style="display:none">
+              <div style="display:flex;gap:8px;margin-bottom:12px">
+                <button class="secondary outline" id="waConnectBtn" type="button">Connect</button>
+                <button class="secondary outline" id="waDisconnectBtn" type="button" style="display:none">Disconnect</button>
+              </div>
+              <div id="waStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:8px"></div>
+              <div id="waQrContainer" style="text-align:center;display:none">
+                <p style="font-size:13px;margin-bottom:8px">Scan this QR code with WhatsApp on your phone:</p>
+                <img id="waQrImg" alt="WhatsApp QR Code" style="max-width:260px;border-radius:10px;border:1px solid var(--surface-border)">
+              </div>
+            </div>
+          </fieldset>
+
           <button id="saveBtn">Save</button>
         </form>
         <div id="status"></div>
@@ -144,6 +163,89 @@
       }
     });
 
+    // WhatsApp toggle
+    document.getElementById('waEnabled').addEventListener('change', function() {
+      document.getElementById('waControls').style.display = this.checked ? '' : 'none';
+      if (this.checked) refreshWhatsAppStatus();
+    });
+
+    let waPollingTimer = null;
+    function refreshWhatsAppStatus() {
+      fetch('/api/whatsapp/status')
+        .then(r => r.json())
+        .then(data => {
+          const statusEl = document.getElementById('waStatus');
+          const qrContainer = document.getElementById('waQrContainer');
+          const connectBtn = document.getElementById('waConnectBtn');
+          const disconnectBtn = document.getElementById('waDisconnectBtn');
+
+          const labels = {
+            disconnected: 'Disconnected',
+            connecting: 'Connecting...',
+            qr_ready: 'Scan QR code below',
+            connected: 'Connected',
+          };
+          statusEl.textContent = 'Status: ' + (labels[data.status] || data.status);
+
+          if (data.status === 'connected') {
+            statusEl.style.color = '#22c55e';
+            connectBtn.style.display = 'none';
+            disconnectBtn.style.display = '';
+            qrContainer.style.display = 'none';
+            stopWaPolling();
+          } else if (data.status === 'disconnected') {
+            statusEl.style.color = 'var(--text-secondary)';
+            connectBtn.style.display = '';
+            disconnectBtn.style.display = 'none';
+            qrContainer.style.display = 'none';
+            stopWaPolling();
+          } else {
+            statusEl.style.color = 'var(--text-secondary)';
+            connectBtn.style.display = 'none';
+            disconnectBtn.style.display = '';
+          }
+
+          if (data.status === 'qr_ready') {
+            fetch('/api/whatsapp/qr')
+              .then(r => r.json())
+              .then(qrData => {
+                if (qrData.qr) {
+                  document.getElementById('waQrImg').src = qrData.qr;
+                  qrContainer.style.display = '';
+                }
+              })
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+
+    function startWaPolling() {
+      stopWaPolling();
+      waPollingTimer = setInterval(refreshWhatsAppStatus, 2000);
+    }
+    function stopWaPolling() {
+      if (waPollingTimer) { clearInterval(waPollingTimer); waPollingTimer = null; }
+    }
+
+    document.getElementById('waConnectBtn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/whatsapp/connect', { method: 'POST' });
+        startWaPolling();
+        refreshWhatsAppStatus();
+      } catch {
+        showStatus('Failed to connect WhatsApp', 'error');
+      }
+    });
+    document.getElementById('waDisconnectBtn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+        refreshWhatsAppStatus();
+      } catch {
+        showStatus('Failed to disconnect WhatsApp', 'error');
+      }
+    });
+
     // Save
     document.getElementById('saveBtn').addEventListener('click', async () => {
       const provider = getProvider();
@@ -174,11 +276,13 @@
         ...(model ? { model } : {}),
         baseUrl,
       };
+      const waEnabled = document.getElementById('waEnabled').checked;
       const config = {
         provider,
         claude: provider === 'claude' ? providerConfig : {},
         openai: provider === 'openai' ? providerConfig : {},
         server: { port },
+        whatsapp: { enabled: waEnabled },
       };
 
       try {
@@ -239,6 +343,12 @@
           if (c[c.provider]?.model) {
             const select = document.getElementById('model');
             select.innerHTML = `<option value="${escapeHtml(c[c.provider].model)}">${escapeHtml(c[c.provider].model)}</option>`;
+          }
+          // WhatsApp state
+          if (c.whatsapp?.enabled) {
+            document.getElementById('waEnabled').checked = true;
+            document.getElementById('waControls').style.display = '';
+            refreshWhatsAppStatus();
           }
         }
         if (mcpData.mcpServers && Object.keys(mcpData.mcpServers).length > 0) {

@@ -9,6 +9,7 @@ export interface Conversation {
   provider: string;
   sdk_session_id: string | null;
   title: string | null;
+  channel_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +58,11 @@ export function getDb(): Database.Database {
   } else if (!cols.some((c) => c.name === "mode")) {
     db.exec("ALTER TABLE conversations ADD COLUMN mode INTEGER NOT NULL DEFAULT 0");
   }
+  // Migration: add channel_id column
+  if (!cols.some((c) => c.name === "channel_id")) {
+    db.exec("ALTER TABLE conversations ADD COLUMN channel_id TEXT");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_conversations_channel_id ON conversations(channel_id)");
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,21 +76,27 @@ export function getDb(): Database.Database {
   return db;
 }
 
-export function createConversation(provider: string, mode: number = 0): Conversation {
+export function createConversation(provider: string, mode: number = 0, channelId?: string): Conversation {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   getDb()
     .prepare(
-      "INSERT INTO conversations (id, provider, mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO conversations (id, provider, mode, channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .run(id, provider, mode, now, now);
-  return { id, provider, sdk_session_id: null, title: null, created_at: now, updated_at: now };
+    .run(id, provider, mode, channelId ?? null, now, now);
+  return { id, provider, sdk_session_id: null, title: null, channel_id: channelId ?? null, created_at: now, updated_at: now };
 }
 
 export function getConversation(id: string): Conversation | undefined {
   return getDb()
     .prepare("SELECT * FROM conversations WHERE id = ?")
     .get(id) as Conversation | undefined;
+}
+
+export function findConversationByChannelId(channelId: string): Conversation | undefined {
+  return getDb()
+    .prepare("SELECT * FROM conversations WHERE channel_id = ? ORDER BY updated_at DESC LIMIT 1")
+    .get(channelId) as Conversation | undefined;
 }
 
 export function updateSessionId(conversationId: string, sdkSessionId: string): void {

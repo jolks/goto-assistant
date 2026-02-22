@@ -276,6 +276,19 @@ body {
   flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 
+.wa-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #25d366;
+  color: #fff;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
 .conversation-item .delete-btn {
   display: none; flex-shrink: 0; font-size: 12px; padding: 2px 6px;
   color: var(--text-muted);

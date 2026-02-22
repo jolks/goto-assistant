@@ -3,7 +3,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig, type WhatsAppConfig } from "./config.js";
+import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
 import { startCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
@@ -89,12 +90,13 @@ export function createApp(): Express {
       return;
     }
     // Merge with existing config to preserve fields not sent (e.g. API key when editing)
-    const existing = isConfigured() ? loadConfig() : { provider: "", claude: { apiKey: "", model: "", baseUrl: "" }, openai: { apiKey: "", model: "", baseUrl: "" }, server: { port: 3000 } };
+    const existing = isConfigured() ? loadConfig() : { provider: "", claude: { apiKey: "", model: "", baseUrl: "" }, openai: { apiKey: "", model: "", baseUrl: "" }, server: { port: 3000 }, whatsapp: { enabled: false } };
     const config: Config = {
       provider: incoming.provider,
       claude: { ...existing.claude, ...incoming.claude },
       openai: { ...existing.openai, ...incoming.openai },
       server: incoming.server,
+      whatsapp: incoming.whatsapp as WhatsAppConfig | undefined ?? existing.whatsapp,
       configVersion: CURRENT_CONFIG_VERSION,
     };
     saveConfig(config);
@@ -106,6 +108,16 @@ export function createApp(): Express {
     startCronServer().catch((err) =>
       console.error("Failed to start mcp-cron:", err)
     );
+    // Start or stop WhatsApp based on config
+    if (config.whatsapp?.enabled) {
+      startWhatsApp().catch((err) =>
+        console.error("Failed to start WhatsApp:", err)
+      );
+    } else {
+      stopWhatsApp().catch((err) =>
+        console.error("Failed to stop WhatsApp:", err)
+      );
+    }
     res.json({ ok: true });
   });
 
@@ -233,6 +245,43 @@ export function createApp(): Express {
     id: req.params.id,
     limit: parseInt(req.query.limit as string) || 1,
   }));
+
+  // --- WhatsApp endpoints ---
+
+  app.get("/api/whatsapp/status", (_req, res) => {
+    if (!isConfigured()) {
+      res.json({ enabled: false, status: "disconnected" });
+      return;
+    }
+    const config = loadConfig();
+    res.json({
+      enabled: config.whatsapp?.enabled ?? false,
+      status: getWhatsAppStatus(),
+    });
+  });
+
+  app.get("/api/whatsapp/qr", async (_req, res) => {
+    const qr = await getWhatsAppQrDataUri();
+    res.json({ qr });
+  });
+
+  app.post("/api/whatsapp/connect", async (_req, res) => {
+    try {
+      await startWhatsApp();
+      res.json({ ok: true, status: getWhatsAppStatus() });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to start WhatsApp" });
+    }
+  });
+
+  app.post("/api/whatsapp/disconnect", async (_req, res) => {
+    try {
+      await stopWhatsApp();
+      res.json({ ok: true, status: "disconnected" });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to stop WhatsApp" });
+    }
+  });
 
   return app;
 }

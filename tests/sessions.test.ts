@@ -6,6 +6,7 @@ import {
   getDb,
   createConversation,
   getConversation,
+  findConversationByChannelId,
   updateSessionId,
   updateTitle,
   listConversations,
@@ -163,6 +164,40 @@ describe("sessions", () => {
     // Verify data was preserved
     const row = db.prepare("SELECT mode FROM conversations WHERE id = ?").get("old-conv") as { mode: number };
     expect(row.mode).toBe(1);
+  });
+
+  it("creates a conversation with channel_id", () => {
+    const conv = createConversation("claude", 0, "whatsapp:123456");
+    expect(conv.channel_id).toBe("whatsapp:123456");
+
+    const retrieved = getConversation(conv.id);
+    expect(retrieved!.channel_id).toBe("whatsapp:123456");
+  });
+
+  it("creates a conversation with null channel_id by default", () => {
+    const conv = createConversation("claude");
+    expect(conv.channel_id).toBeNull();
+  });
+
+  it("findConversationByChannelId returns matching conversation", () => {
+    createConversation("claude", 0, "whatsapp:123");
+    createConversation("claude", 0, "whatsapp:456");
+
+    const found = findConversationByChannelId("whatsapp:123");
+    expect(found).toBeDefined();
+    expect(found!.channel_id).toBe("whatsapp:123");
+  });
+
+  it("findConversationByChannelId returns undefined for unknown channelId", () => {
+    getDb(); // ensure DB is initialized
+    const found = findConversationByChannelId("nonexistent");
+    expect(found).toBeUndefined();
+  });
+
+  it("adds channel_id column via migration", () => {
+    const db = getDb();
+    const cols = db.pragma("table_info(conversations)") as Array<{ name: string }>;
+    expect(cols.map(c => c.name)).toContain("channel_id");
   });
 
   it("deletes a conversation and its messages", () => {
