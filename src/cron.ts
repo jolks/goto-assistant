@@ -6,11 +6,9 @@ let cronProc: ChildProcess | null = null;
 // callCronTool() allocates from 100+ to avoid collisions.
 let nextId = 100;
 
-/** Kill a process tree (npx spawns child processes that must also be terminated). */
+/** Kill an MCP stdio server. Killing npx breaks the stdin pipe, causing the child (mcp-cron) to exit on EOF. */
 function killProc(proc: ChildProcess): void {
-  if (!proc.pid) return;
-  // Kill the entire process group (npx + its children) via negative PID
-  try { process.kill(-proc.pid, "SIGTERM"); } catch { /* already dead */ }
+  try { proc.kill("SIGTERM"); } catch { /* already dead */ }
 }
 
 export function isCronRunning(): boolean {
@@ -103,7 +101,6 @@ export async function startCronServer(): Promise<void> {
   const proc = spawn(cronConfig.command, cronConfig.args, {
     env: { ...process.env, ...cronConfig.env },
     stdio: ["pipe", "pipe", "ignore"],
-    detached: true,
   });
 
   proc.on("exit", (code) => {
