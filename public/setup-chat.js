@@ -280,37 +280,29 @@ function handleModelSelect(modelId) {
           doSaveConfig(false);
         });
       } else {
-        addMessage('assistant', 'Would you like to enable WhatsApp integration?\n\nThis lets you message the assistant from WhatsApp (via your own self-chat). You can always enable it later from the setup page.');
-        showChoices([
-          { label: 'Skip', value: 'skip' },
-          { label: 'Enable WhatsApp', value: 'enable' },
-        ], function (choice) {
-          addMessage('user', choice === 'enable' ? 'Enable WhatsApp' : 'Skip');
-          var waCheckbox = document.getElementById('waEnabled');
-          if (choice === 'enable' && waCheckbox) {
-            waCheckbox.checked = true;
-            waCheckbox.dispatchEvent(new Event('change'));
-          }
-          doSaveConfig(choice === 'enable');
-        });
+        showWhatsAppEnableChoices();
       }
     })
     .catch(function () {
       // If status check fails, fall back to default flow
-      addMessage('assistant', 'Would you like to enable WhatsApp integration?\n\nThis lets you message the assistant from WhatsApp (via your own self-chat). You can always enable it later from the setup page.');
-      showChoices([
-        { label: 'Skip', value: 'skip' },
-        { label: 'Enable WhatsApp', value: 'enable' },
-      ], function (choice) {
-        addMessage('user', choice === 'enable' ? 'Enable WhatsApp' : 'Skip');
-        var waCheckbox = document.getElementById('waEnabled');
-        if (choice === 'enable' && waCheckbox) {
-          waCheckbox.checked = true;
-          waCheckbox.dispatchEvent(new Event('change'));
-        }
-        doSaveConfig(choice === 'enable');
-      });
+      showWhatsAppEnableChoices();
     });
+}
+
+function showWhatsAppEnableChoices() {
+  addMessage('assistant', 'Would you like to enable WhatsApp integration?\n\nThis lets you message the assistant from WhatsApp (via your own self-chat). You can always enable it later from the setup page.');
+  showChoices([
+    { label: 'Skip', value: 'skip' },
+    { label: 'Enable WhatsApp', value: 'enable' },
+  ], function (choice) {
+    addMessage('user', choice === 'enable' ? 'Enable WhatsApp' : 'Skip');
+    var waCheckbox = document.getElementById('waEnabled');
+    if (choice === 'enable' && waCheckbox) {
+      waCheckbox.checked = true;
+      waCheckbox.dispatchEvent(new Event('change'));
+    }
+    doSaveConfig(choice === 'enable');
+  });
 }
 
 function startWhatsAppLinking() {

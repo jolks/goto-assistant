@@ -253,6 +253,7 @@ export function createApp(): Express {
 
   // --- Reload services (re-read config from disk, restart cron + WhatsApp) ---
 
+  // No auth — this is a self-hosted personal tool; all endpoints are unauthenticated.
   app.post("/api/reload", (_req, res) => {
     reloadServices();
     res.json({ ok: true });

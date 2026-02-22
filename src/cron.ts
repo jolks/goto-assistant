@@ -1,4 +1,4 @@
-import { spawn, execSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { loadMcpServers } from "./config.js";
 
 let cronProc: ChildProcess | null = null;
@@ -9,9 +9,8 @@ let nextId = 100;
 /** Kill a process tree (npx spawns child processes that must also be terminated). */
 function killProc(proc: ChildProcess): void {
   if (!proc.pid) return;
-  // Kill child processes first (e.g. the actual mcp-cron spawned by npx)
-  try { execSync(`pkill -TERM -P ${proc.pid}`, { stdio: "ignore" }); } catch { /* no children or already dead */ }
-  try { proc.kill("SIGTERM"); } catch { /* already dead */ }
+  // Kill the entire process group (npx + its children) via negative PID
+  try { process.kill(-proc.pid, "SIGTERM"); } catch { /* already dead */ }
 }
 
 export function isCronRunning(): boolean {
@@ -104,6 +103,7 @@ export async function startCronServer(): Promise<void> {
   const proc = spawn(cronConfig.command, cronConfig.args, {
     env: { ...process.env, ...cronConfig.env },
     stdio: ["pipe", "pipe", "ignore"],
+    detached: true,
   });
 
   proc.on("exit", (code) => {
@@ -149,7 +149,14 @@ export async function startCronServer(): Promise<void> {
   }
 }
 
+let lastCronFingerprint: string | null = null;
+
 export async function restartCronServer(): Promise<void> {
+  const servers = loadMcpServers();
+  const cronConfig = servers["cron"];
+  const fingerprint = cronConfig ? JSON.stringify(cronConfig) : "";
+  if (fingerprint === lastCronFingerprint && cronProc) return;
+  lastCronFingerprint = fingerprint;
   await stopCronServer();
   await startCronServer();
 }
@@ -158,5 +165,6 @@ export async function stopCronServer(): Promise<void> {
   if (!cronProc) return;
   const proc = cronProc;
   cronProc = null;
+  lastCronFingerprint = null;
   killProc(proc);
 }

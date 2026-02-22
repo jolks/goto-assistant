@@ -243,7 +243,7 @@ export async function startWhatsApp(): Promise<void> {
   sock = makeWASocket({
     auth: {
       creds: state.creds,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Baileys expects a pino logger; pass undefined to suppress logs
       keys: makeCacheableSignalKeyStore(state.keys, undefined as any),
     },
     printQRInTerminal: false,
@@ -300,7 +300,7 @@ export async function stopWhatsApp(): Promise<void> {
   currentQr = null;
   connectionStatus = "disconnected";
   if (sock) {
-    sock.end(undefined);
+    sock.end(undefined); // Baileys requires an explicit Error | undefined argument
     sock = null;
   }
 }
