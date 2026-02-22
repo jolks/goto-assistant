@@ -57,6 +57,78 @@ One command, no Docker, no framework — just MCP.
 
 That one `npx` command gives you an AI assistant that can remember across conversations, manage your files, and run tasks on a schedule or on-demand — all through the standard [MCP protocol](https://modelcontextprotocol.io). Add any MCP server to extend it further.
 
+## See it in action
+
+### Setup
+
+<table>
+<tr>
+<td width="50%">
+
+**First run — provider & API key**
+
+<video src="https://github.com/user-attachments/assets/89296859-bd91-4e8b-8839-4ec067625b06" width="100%"></video>
+
+Run `npx goto-assistant`, pick your AI provider, paste your API key — done.
+
+</td>
+<td width="50%">
+
+**Adding an MCP server**
+
+<video src="https://github.com/user-attachments/assets/393ed73f-1a0c-4dfe-bac8-2570ea3ac498" width="100%"></video>
+
+Add MCP servers through the setup wizard. The assistant verifies each server before save (trimmed for brevity — verification may take up to minutes for security purposes).
+
+</td>
+</tr>
+</table>
+
+### Tasks
+
+<table>
+<tr>
+<td width="50%">
+
+**Create a task**
+
+<video src="https://github.com/user-attachments/assets/249eab2c-250d-4f96-98b3-2bb78640efa9" width="100%"></video>
+
+Ask the assistant to create an on-demand task.
+
+</td>
+<td width="50%">
+
+**Update a task**
+
+<video src="https://github.com/user-attachments/assets/960345c7-b314-4c88-b0e6-cb68e53a1e7b" width="100%"></video>
+
+Modify task prompts, commands, or settings through chat.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Run a task & compare results**
+
+<video src="https://github.com/user-attachments/assets/b5202cbb-3e4c-4284-9ec9-46941cbf7c19" width="100%"></video>
+
+Run tasks on demand and compare results across runs.
+
+</td>
+<td width="50%">
+
+**Schedule a task**
+
+<video src="https://github.com/user-attachments/assets/de8b34d7-7141-4552-b986-565f871b9859" width="100%"></video>
+
+Schedule tasks to run periodically using natural language.
+
+</td>
+</tr>
+</table>
+
 ## Data Privacy
 
 goto-assistant connects directly to AI providers using your own API keys. Both Anthropic and OpenAI have clear policies that API data is **not used for model training** by default:
