@@ -4,7 +4,7 @@
 
 # goto-assistant
 
-Lightweight, self-hosted AI assistant with first-class MCP support. Supports both Claude (Anthropic) and OpenAI as providers, with a web-based chat interface.
+Lightweight, self-hosted AI assistant with first-class MCP support. Supports Claude and OpenAI, with web and WhatsApp interfaces.
 
 ## Quick Start
 
@@ -65,11 +65,11 @@ That one `npx` command gives you an AI assistant that can remember across conver
 <tr>
 <td width="50%">
 
-**First run — provider & API key**
+**First run — provider, API key & WhatsApp**
 
-<video src="https://github.com/user-attachments/assets/89296859-bd91-4e8b-8839-4ec067625b06" width="100%"></video>
+<video src="https://github.com/user-attachments/assets/2e1a0e5e-bd27-4cfc-abc1-acd1d9ac91ed" width="100%"></video>
 
-Run `npx goto-assistant`, pick your AI provider, paste your API key — done.
+Run `npx goto-assistant`, pick your AI provider, paste your API key, and connect WhatsApp by scanning the QR code — done.
 
 </td>
 <td width="50%">
@@ -125,6 +125,19 @@ Run tasks on demand and compare results across runs.
 
 Schedule tasks to run periodically using natural language.
 
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Chat & manage tasks on WhatsApp**
+
+<video src="https://github.com/user-attachments/assets/f5f63f3b-c13e-42f2-8ff0-6c10d1dc76fc" width="100%"></video>
+
+Chat with the AI assistant and manage tasks from WhatsApp — the same assistant, on the go.
+
+</td>
+<td width="50%">
 </td>
 </tr>
 </table>
