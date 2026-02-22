@@ -18,14 +18,6 @@ vi.mock("../src/uploads.js", () => ({
   saveUpload: vi.fn(),
 }));
 
-// Mock MaxTurnsExceededError class
-class MockMaxTurnsExceededError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "MaxTurnsExceededError";
-  }
-}
-
 // Mock @openai/agents before importing runOpenAI
 const mockRun = vi.fn().mockImplementation((_agent: unknown, input: unknown) => {
   capturedInput = input;
@@ -36,7 +28,8 @@ const mockRun = vi.fn().mockImplementation((_agent: unknown, input: unknown) => 
   };
 });
 
-vi.mock("@openai/agents", () => {
+vi.mock("@openai/agents", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openai/agents")>();
   return {
     Agent: vi.fn().mockImplementation(() => ({})),
     MCPServerStdio: vi.fn().mockImplementation(() => ({
@@ -45,11 +38,12 @@ vi.mock("@openai/agents", () => {
     })),
     run: mockRun,
     shellTool: vi.fn().mockImplementation(() => ({ type: "shell", name: "shell" })),
-    MaxTurnsExceededError: MockMaxTurnsExceededError,
+    MaxTurnsExceededError: actual.MaxTurnsExceededError,
   };
 });
 
 const { runOpenAI } = await import("../src/agents/openai.js");
+const { MaxTurnsExceededError } = await import("@openai/agents");
 
 const config: Config = {
   provider: "openai",
@@ -147,7 +141,7 @@ describe("openai input construction", () => {
 describe("openai max turns handling", () => {
   it("sends a user-friendly message when MaxTurnsExceededError is thrown", async () => {
     mockRun.mockImplementationOnce(() => {
-      throw new MockMaxTurnsExceededError("Max turns (30) exceeded");
+      throw new MaxTurnsExceededError("Max turns (30) exceeded");
     });
 
     const chunks: string[] = [];
