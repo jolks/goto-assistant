@@ -258,22 +258,58 @@ function handleModelSelect(modelId) {
   select.value = modelId;
   syncCronFromChat();
 
-  // Ask about WhatsApp
+  // Check WhatsApp status before asking
   setupChatState.current = 'whatsapp';
-  addMessage('assistant', 'Would you like to enable WhatsApp integration?\n\nThis lets you message the assistant from WhatsApp (via your own self-chat). You can always enable it later from the setup page.');
-  showChoices([
-    { label: 'Skip', value: 'skip' },
-    { label: 'Enable WhatsApp', value: 'enable' },
-  ], function (choice) {
-    addMessage('user', choice === 'enable' ? 'Enable WhatsApp' : 'Skip');
-    var waCheckbox = document.getElementById('waEnabled');
-    if (choice === 'enable' && waCheckbox) {
-      waCheckbox.checked = true;
-      waCheckbox.dispatchEvent(new Event('change'));
-    }
-    doSaveConfig(choice === 'enable');
-  });
   setInputMode('disabled');
+  fetch('/api/whatsapp/status')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.status === 'connected') {
+        addMessage('assistant', 'WhatsApp is already connected. Keep it enabled?');
+        showChoices([
+          { label: 'Keep enabled', value: 'keep' },
+          { label: 'Disable', value: 'disable' },
+        ], function (choice) {
+          addMessage('user', choice === 'keep' ? 'Keep enabled' : 'Disable');
+          var waCheckbox = document.getElementById('waEnabled');
+          if (waCheckbox) {
+            waCheckbox.checked = choice === 'keep';
+            waCheckbox.dispatchEvent(new Event('change'));
+          }
+          doSaveConfig(false);
+        });
+      } else {
+        addMessage('assistant', 'Would you like to enable WhatsApp integration?\n\nThis lets you message the assistant from WhatsApp (via your own self-chat). You can always enable it later from the setup page.');
+        showChoices([
+          { label: 'Skip', value: 'skip' },
+          { label: 'Enable WhatsApp', value: 'enable' },
+        ], function (choice) {
+          addMessage('user', choice === 'enable' ? 'Enable WhatsApp' : 'Skip');
+          var waCheckbox = document.getElementById('waEnabled');
+          if (choice === 'enable' && waCheckbox) {
+            waCheckbox.checked = true;
+            waCheckbox.dispatchEvent(new Event('change'));
+          }
+          doSaveConfig(choice === 'enable');
+        });
+      }
+    })
+    .catch(function () {
+      // If status check fails, fall back to default flow
+      addMessage('assistant', 'Would you like to enable WhatsApp integration?\n\nThis lets you message the assistant from WhatsApp (via your own self-chat). You can always enable it later from the setup page.');
+      showChoices([
+        { label: 'Skip', value: 'skip' },
+        { label: 'Enable WhatsApp', value: 'enable' },
+      ], function (choice) {
+        addMessage('user', choice === 'enable' ? 'Enable WhatsApp' : 'Skip');
+        var waCheckbox = document.getElementById('waEnabled');
+        if (choice === 'enable' && waCheckbox) {
+          waCheckbox.checked = true;
+          waCheckbox.dispatchEvent(new Event('change'));
+        }
+        doSaveConfig(choice === 'enable');
+      });
+    });
 }
 
 function startWhatsAppLinking() {

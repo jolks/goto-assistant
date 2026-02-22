@@ -467,7 +467,7 @@ describe("setup-chat", () => {
   });
 
   describe("handleModelSelect WhatsApp step", () => {
-    it("shows WhatsApp choices after model selection", () => {
+    it("shows WhatsApp choices when not connected", async () => {
       setupChatState.current = "model";
       setupChatState.provider = "claude";
       setupChatState.apiKey = "sk-test";
@@ -475,7 +475,56 @@ describe("setup-chat", () => {
       const select = document.getElementById("model") as HTMLSelectElement;
       select.innerHTML = '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>';
 
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ status: "disconnected" }),
+      });
+
       handleModelSelect("claude-sonnet-4-5-20250929");
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(setupChatState.current).toBe("whatsapp");
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      expect(choices).toHaveLength(2);
+      expect(choices[0].textContent).toBe("Skip");
+      expect(choices[1].textContent).toBe("Enable WhatsApp");
+    });
+
+    it("shows keep/disable choices when WhatsApp is already connected", async () => {
+      setupChatState.current = "model";
+      setupChatState.provider = "claude";
+      setupChatState.apiKey = "sk-test";
+      setupChatState.baseUrl = "";
+      const select = document.getElementById("model") as HTMLSelectElement;
+      select.innerHTML = '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>';
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ status: "connected" }),
+      });
+
+      handleModelSelect("claude-sonnet-4-5-20250929");
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(setupChatState.current).toBe("whatsapp");
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      expect(choices).toHaveLength(2);
+      expect(choices[0].textContent).toBe("Keep enabled");
+      expect(choices[1].textContent).toBe("Disable");
+    });
+
+    it("falls back to default choices when status check fails", async () => {
+      setupChatState.current = "model";
+      setupChatState.provider = "claude";
+      setupChatState.apiKey = "sk-test";
+      setupChatState.baseUrl = "";
+      const select = document.getElementById("model") as HTMLSelectElement;
+      select.innerHTML = '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>';
+
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("network error"));
+
+      handleModelSelect("claude-sonnet-4-5-20250929");
+      await new Promise((r) => setTimeout(r, 50));
 
       expect(setupChatState.current).toBe("whatsapp");
       const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
