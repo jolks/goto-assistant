@@ -317,50 +317,45 @@ function startWhatsAppLinking() {
 }
 
 function pollWhatsAppQr() {
-  var timer = setInterval(function () {
-    fetch('/api/whatsapp/status')
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.status === 'connected') {
-          clearInterval(timer);
-          // Remove the QR image if present
-          var existingQr = document.getElementById('chatWaQr');
-          if (existingQr) existingQr.remove();
-          addMessage('assistant', 'WhatsApp connected! You can now message yourself on WhatsApp to chat with the assistant.');
-          // Refresh form to show connected status
-          if (typeof window.refreshForm === 'function') window.refreshForm();
-          finishSetup();
-        } else if (data.status === 'qr_ready') {
-          fetch('/api/whatsapp/qr')
-            .then(function (r) { return r.json(); })
-            .then(function (qrData) {
-              if (qrData.qr) {
-                var existingQr = document.getElementById('chatWaQr');
-                if (existingQr) {
-                  existingQr.src = qrData.qr;
-                } else {
-                  var msgEl = addMessage('assistant', 'Scan this QR code with WhatsApp on your phone:\n\n');
-                  var img = document.createElement('img');
-                  img.id = 'chatWaQr';
-                  img.src = qrData.qr;
-                  img.alt = 'WhatsApp QR Code';
-                  img.style.maxWidth = '220px';
-                  img.style.borderRadius = '10px';
-                  img.style.border = '1px solid var(--surface-border)';
-                  msgEl.appendChild(img);
-                  var container = document.getElementById('chatMessages');
-                  container.scrollTop = container.scrollHeight;
-                }
-              }
-            })
-            .catch(function () {});
-        } else if (data.status === 'disconnected') {
-          clearInterval(timer);
-          addMessage('assistant', 'WhatsApp disconnected. You can try again from the setup form.');
-          finishSetup();
-        }
-      })
-      .catch(function () {});
+  var timer = setInterval(async function () {
+    try {
+      var r = await fetch('/api/whatsapp/status');
+      var data = await r.json();
+
+      if (data.status === 'connected') {
+        clearInterval(timer);
+        var existingQr = document.getElementById('chatWaQr');
+        if (existingQr) existingQr.remove();
+        addMessage('assistant', 'WhatsApp connected! You can now message yourself on WhatsApp to chat with the assistant.');
+        if (typeof window.refreshForm === 'function') window.refreshForm();
+        finishSetup();
+      } else if (data.status === 'qr_ready') {
+        try {
+          var qrRes = await fetch('/api/whatsapp/qr');
+          var qrData = await qrRes.json();
+          if (qrData.qr) {
+            var existing = document.getElementById('chatWaQr');
+            if (existing) {
+              existing.src = qrData.qr;
+            } else {
+              var msgEl = addMessage('assistant', 'Scan this QR code with WhatsApp on your phone:\n\n');
+              var img = document.createElement('img');
+              img.id = 'chatWaQr';
+              img.src = qrData.qr;
+              img.alt = 'WhatsApp QR Code';
+              img.className = 'wa-qr-img';
+              msgEl.appendChild(img);
+              var container = document.getElementById('chatMessages');
+              container.scrollTop = container.scrollHeight;
+            }
+          }
+        } catch (_) {}
+      } else if (data.status === 'disconnected') {
+        clearInterval(timer);
+        addMessage('assistant', 'WhatsApp disconnected. You can try again from the setup form.');
+        finishSetup();
+      }
+    } catch (_) {}
   }, 2000);
 }
 

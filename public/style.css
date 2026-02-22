@@ -1121,6 +1121,11 @@ body {
 
 .chat-open-btn { margin-bottom: 1.5rem; }
 
+/* WhatsApp controls on setup page */
+.wa-btn-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.wa-status-text { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.wa-qr-img { max-width: 260px; border-radius: 10px; border: 1px solid var(--surface-border); }
+
 
 /* ====================================
    RESPONSIVE

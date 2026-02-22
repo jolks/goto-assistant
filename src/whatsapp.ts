@@ -115,6 +115,7 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
 
       // Handle image attachments
       let attachments: Attachment[] | undefined;
+      let attachmentFileId: string | undefined;
       const imageMessage = msg.message?.imageMessage;
       if (imageMessage) {
         try {
@@ -124,17 +125,17 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
             {}
           ) as Buffer;
           const mimeType = imageMessage.mimetype || "image/jpeg";
-          if (ALLOWED_IMAGE_TYPES.includes(mimeType)) {
-            const ext = mimeType.split("/")[1] || "jpg";
-            const filename = `whatsapp-${Date.now()}.${ext}`;
-            const meta = saveUpload(buffer, filename, mimeType);
-            attachments = [{
-              filename: meta.filename,
-              mimeType: meta.mimeType,
-              data: buffer,
-              filePath: path.resolve(UPLOADS_DIR, meta.fileId, meta.filename),
-            }];
-          }
+          if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) throw new Error("Unsupported image type");
+          const ext = mimeType.split("/")[1] || "jpg";
+          const filename = `whatsapp-${Date.now()}.${ext}`;
+          const meta = saveUpload(buffer, filename, mimeType);
+          attachmentFileId = meta.fileId;
+          attachments = [{
+            filename: meta.filename,
+            mimeType: meta.mimeType,
+            data: buffer,
+            filePath: path.resolve(UPLOADS_DIR, meta.fileId, meta.filename),
+          }];
         } catch (err) {
           console.error("Failed to download WhatsApp media:", err);
         }
@@ -156,7 +157,7 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
         saveMessage(conversation.id, "user", JSON.stringify({
           text: prompt,
           attachments: attachments.map(a => ({
-            fileId: path.basename(path.dirname(a.filePath!)),
+            fileId: attachmentFileId,
             filename: a.filename,
             mimeType: a.mimeType,
           })),

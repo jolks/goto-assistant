@@ -59,14 +59,14 @@
               Enable WhatsApp integration
             </label>
             <div id="waControls" style="display:none">
-              <div style="display:flex;gap:8px;margin-bottom:12px">
+              <div class="wa-btn-row">
                 <button class="secondary outline" id="waConnectBtn" type="button">Connect</button>
                 <button class="secondary outline" id="waDisconnectBtn" type="button" style="display:none">Disconnect</button>
               </div>
-              <div id="waStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:8px"></div>
+              <div id="waStatus" class="wa-status-text"></div>
               <div id="waQrContainer" style="text-align:center;display:none">
                 <p style="font-size:13px;margin-bottom:8px">Scan this QR code with WhatsApp on your phone:</p>
-                <img id="waQrImg" alt="WhatsApp QR Code" style="max-width:260px;border-radius:10px;border:1px solid var(--surface-border)">
+                <img id="waQrImg" alt="WhatsApp QR Code" class="wa-qr-img">
               </div>
             </div>
           </fieldset>
@@ -187,23 +187,15 @@
           };
           statusEl.textContent = 'Status: ' + (labels[data.status] || data.status);
 
-          if (data.status === 'connected') {
-            statusEl.style.color = '#22c55e';
-            connectBtn.style.display = 'none';
-            disconnectBtn.style.display = '';
-            qrContainer.style.display = 'none';
-            stopWaPolling();
-          } else if (data.status === 'disconnected') {
-            statusEl.style.color = 'var(--text-secondary)';
-            connectBtn.style.display = '';
-            disconnectBtn.style.display = 'none';
-            qrContainer.style.display = 'none';
-            stopWaPolling();
-          } else {
-            statusEl.style.color = 'var(--text-secondary)';
-            connectBtn.style.display = 'none';
-            disconnectBtn.style.display = '';
-          }
+          var ui = {
+            connected:    { color: '#22c55e', connect: 'none', disconnect: '', qr: 'none', poll: false },
+            disconnected: { color: 'var(--text-secondary)', connect: '', disconnect: 'none', qr: 'none', poll: false },
+          }[data.status] || { color: 'var(--text-secondary)', connect: 'none', disconnect: '' };
+          statusEl.style.color = ui.color;
+          connectBtn.style.display = ui.connect;
+          disconnectBtn.style.display = ui.disconnect;
+          if (ui.qr !== undefined) qrContainer.style.display = ui.qr;
+          if (ui.poll === false) stopWaPolling();
 
           if (data.status === 'qr_ready') {
             fetch('/api/whatsapp/qr')

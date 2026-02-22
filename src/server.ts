@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig, type WhatsAppConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
@@ -113,7 +113,7 @@ export function createApp(): Express {
       claude: { ...existing.claude, ...incoming.claude },
       openai: { ...existing.openai, ...incoming.openai },
       server: incoming.server,
-      whatsapp: incoming.whatsapp as WhatsAppConfig | undefined ?? existing.whatsapp,
+      whatsapp: incoming.whatsapp ?? existing.whatsapp,
       configVersion: CURRENT_CONFIG_VERSION,
     };
     saveConfig(config);
