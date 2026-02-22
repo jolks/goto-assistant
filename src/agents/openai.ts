@@ -1,4 +1,4 @@
-import { Agent, run, MCPServerStdio, shellTool } from "@openai/agents";
+import { Agent, run, MCPServerStdio, shellTool, MaxTurnsExceededError } from "@openai/agents";
 import type { Shell, ShellAction, ShellResult, ShellOutputResult } from "@openai/agents";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
@@ -143,18 +143,27 @@ export async function runOpenAI(
     }
 
     const input = inputMessages.length === 1 && !history?.length && !attachments?.length ? prompt : inputMessages;
-    const result = await run(agent, input as string, { stream: true });
 
-    for await (const event of result) {
-      if (
-        event.type === "raw_model_stream_event" &&
-        event.data?.type === "output_text_delta"
-      ) {
-        const delta = (event.data as { delta?: string }).delta;
-        if (delta) {
-          onChunk(delta);
+    try {
+      const result = await run(agent, input as string, { stream: true, maxTurns: 30 });
+
+      for await (const event of result) {
+        if (
+          event.type === "raw_model_stream_event" &&
+          event.data?.type === "output_text_delta"
+        ) {
+          const delta = (event.data as { delta?: string }).delta;
+          if (delta) {
+            onChunk(delta);
+          }
         }
       }
+    } catch (error) {
+      if (error instanceof MaxTurnsExceededError) {
+        onChunk("\n\n[Stopped: reached the maximum number of tool-use turns (30). You can continue the conversation to pick up where I left off.]");
+        return;
+      }
+      throw error;
     }
   } finally {
     // Disconnect all MCP servers

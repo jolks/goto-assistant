@@ -99,6 +99,12 @@ export async function runClaude(
         onChunk(resultMsg.result);
       }
     }
+
+    if (message.type === "result" && message.subtype === "error_max_turns") {
+      const resultMsg = message as { session_id?: string };
+      sessionId = resultMsg.session_id ?? sessionId;
+      onChunk("\n\n[Stopped: reached the maximum number of tool-use turns (30). You can continue the conversation to pick up where I left off.]");
+    }
   }
 
   return { sessionId, conversationId: "" };
