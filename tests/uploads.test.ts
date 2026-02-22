@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import path from "node:path";
 import { saveUpload, getUpload, UPLOADS_DIR, ALLOWED_IMAGE_TYPES } from "../src/uploads.js";
 
 describe("uploads", () => {
@@ -40,6 +41,16 @@ describe("uploads", () => {
   it("getUpload returns null for unknown fileId", () => {
     const result = getUpload("nonexistent-id");
     expect(result).toBeNull();
+  });
+
+  it("saveUpload strips path traversal sequences from filename", () => {
+    const buffer = Buffer.from("fake-image-data");
+    const result = saveUpload(buffer, "../../config.json", "image/png");
+
+    // File must be stored inside the uploads directory, not escaped via traversal
+    expect(path.dirname(result.path)).toBe(path.join(UPLOADS_DIR, result.fileId));
+    expect(result.path).toBe(path.join(UPLOADS_DIR, result.fileId, "config.json"));
+    expect(fs.existsSync(result.path)).toBe(true);
   });
 
   it("ALLOWED_IMAGE_TYPES contains expected types", () => {

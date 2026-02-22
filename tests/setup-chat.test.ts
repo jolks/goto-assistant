@@ -44,6 +44,7 @@ import {
   buildDefaultMcpServers,
   handleInput,
   handleModelSelect,
+  doSaveConfig,
   initSetupChat,
   syncCronFromChat,
 } from "../public/setup-chat.js";
@@ -59,6 +60,7 @@ function setupDOM() {
         <input type="text" id="baseUrl" value="">
         <select id="model"><option value="">— Select provider first —</option></select>
         <input type="number" id="port" value="3000">
+        <input type="checkbox" id="waEnabled">
         <div id="mcpServers" class="mcp-servers"></div>
       </div>
       <div class="setup-chat" id="setupChat">
@@ -464,14 +466,81 @@ describe("setup-chat", () => {
     });
   });
 
-  describe("handleModelSelect error recovery (Fix 11)", () => {
-    it("resets state to model and shows choices on save failure", async () => {
-      // Set up state as if we've gone through provider + api_key + base_url
+  describe("handleModelSelect WhatsApp step", () => {
+    it("shows WhatsApp choices when not connected", async () => {
       setupChatState.current = "model";
       setupChatState.provider = "claude";
       setupChatState.apiKey = "sk-test";
       setupChatState.baseUrl = "";
-      // Populate model <select> with options
+      const select = document.getElementById("model") as HTMLSelectElement;
+      select.innerHTML = '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>';
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ status: "disconnected" }),
+      });
+
+      handleModelSelect("claude-sonnet-4-5-20250929");
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(setupChatState.current).toBe("whatsapp");
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      expect(choices).toHaveLength(2);
+      expect(choices[0].textContent).toBe("Skip");
+      expect(choices[1].textContent).toBe("Enable WhatsApp");
+    });
+
+    it("shows keep/disable choices when WhatsApp is already connected", async () => {
+      setupChatState.current = "model";
+      setupChatState.provider = "claude";
+      setupChatState.apiKey = "sk-test";
+      setupChatState.baseUrl = "";
+      const select = document.getElementById("model") as HTMLSelectElement;
+      select.innerHTML = '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>';
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ status: "connected" }),
+      });
+
+      handleModelSelect("claude-sonnet-4-5-20250929");
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(setupChatState.current).toBe("whatsapp");
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      expect(choices).toHaveLength(2);
+      expect(choices[0].textContent).toBe("Keep enabled");
+      expect(choices[1].textContent).toBe("Disable");
+    });
+
+    it("falls back to default choices when status check fails", async () => {
+      setupChatState.current = "model";
+      setupChatState.provider = "claude";
+      setupChatState.apiKey = "sk-test";
+      setupChatState.baseUrl = "";
+      const select = document.getElementById("model") as HTMLSelectElement;
+      select.innerHTML = '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>';
+
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("network error"));
+
+      handleModelSelect("claude-sonnet-4-5-20250929");
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(setupChatState.current).toBe("whatsapp");
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      expect(choices).toHaveLength(2);
+      expect(choices[0].textContent).toBe("Skip");
+      expect(choices[1].textContent).toBe("Enable WhatsApp");
+    });
+  });
+
+  describe("doSaveConfig error recovery", () => {
+    it("resets state to model and shows choices on save failure", async () => {
+      setupChatState.current = "whatsapp";
+      setupChatState.provider = "claude";
+      setupChatState.apiKey = "sk-test";
+      setupChatState.baseUrl = "";
+      setupChatState.model = "claude-sonnet-4-5-20250929";
       const select = document.getElementById("model") as HTMLSelectElement;
       select.innerHTML =
         '<option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>' +
@@ -483,13 +552,12 @@ describe("setup-chat", () => {
         json: () => Promise.resolve({ error: "Server error" }),
       });
 
-      handleModelSelect("claude-sonnet-4-5-20250929");
+      doSaveConfig(false);
 
       // Wait for the async .catch to execute
       await new Promise((r) => setTimeout(r, 50));
 
       expect(setupChatState.current).toBe("model");
-      // Should show choice buttons to retry
       const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
       expect(choices.length).toBeGreaterThanOrEqual(1);
     });

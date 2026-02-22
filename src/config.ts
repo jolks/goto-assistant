@@ -7,11 +7,16 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+export interface WhatsAppConfig {
+  enabled: boolean;
+}
+
 export interface Config {
   provider: "claude" | "openai";
   claude: { apiKey: string; model: string; baseUrl: string };
   openai: { apiKey: string; model: string; baseUrl: string };
   server: { port: number };
+  whatsapp?: WhatsAppConfig;
   configVersion?: number;
 }
 
@@ -29,6 +34,11 @@ export function isConfigured(): boolean {
 export function loadConfig(): Config {
   const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
   const config: Config = JSON.parse(raw);
+
+  // Default whatsapp config if missing
+  if (!config.whatsapp) {
+    config.whatsapp = { enabled: false };
+  }
 
   // Environment variables override config file values
   if (process.env.ANTHROPIC_API_KEY) {

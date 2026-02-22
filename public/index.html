@@ -318,6 +318,14 @@
           const displayTitle = c.title || `${c.provider} — ${date}`;
           el.title = displayTitle;
 
+          if (c.channel_id) {
+            const waBadge = document.createElement('span');
+            waBadge.className = 'wa-badge';
+            waBadge.textContent = 'WA';
+            waBadge.title = 'WhatsApp';
+            el.appendChild(waBadge);
+          }
+
           const titleSpan = document.createElement('span');
           titleSpan.className = 'conv-title';
           titleSpan.textContent = displayTitle;

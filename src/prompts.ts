@@ -7,6 +7,7 @@ There are two config files you can read and modify using your filesystem tools:
 - claude: { apiKey, model, baseUrl }
 - openai: { apiKey, model, baseUrl }
 - server: { port }
+- whatsapp: { enabled } — optional WhatsApp integration via Baileys (WhatsApp Web protocol). When enabled, users can message the assistant from WhatsApp. Auth is via QR code scan (no API keys needed). Auth state is persisted in ./data/whatsapp-auth/ so QR scan is only needed once. The setup page has a toggle and Connect button with QR display.
 
 **./data/mcp.json** — MCP server config:
 - mcpServers: { name: { command, args (string array), env (optional object) } }

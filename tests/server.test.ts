@@ -10,6 +10,7 @@ vi.mock("../src/agents/openai.js", () => ({
 }));
 vi.mock("../src/cron.js", () => ({
   startCronServer: vi.fn().mockResolvedValue(undefined),
+  restartCronServer: vi.fn().mockResolvedValue(undefined),
   stopCronServer: vi.fn().mockResolvedValue(undefined),
   isCronRunning: vi.fn().mockReturnValue(false),
   callCronTool: vi.fn().mockResolvedValue(undefined),

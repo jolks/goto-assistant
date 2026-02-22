@@ -2,6 +2,7 @@ import { createApp, createServer } from "./server.js";
 import { isConfigured, loadConfig } from "./config.js";
 import { runMigrations } from "./migrations.js";
 import { startCronServer, stopCronServer } from "./cron.js";
+import { startWhatsApp, stopWhatsApp } from "./whatsapp.js";
 
 runMigrations();
 
@@ -18,11 +19,17 @@ server.listen(port, () => {
     startCronServer().catch((err) =>
       console.error("Failed to start mcp-cron:", err)
     );
+    const config = loadConfig();
+    if (config.whatsapp?.enabled) {
+      startWhatsApp().catch((err) =>
+        console.error("Failed to start WhatsApp:", err)
+      );
+    }
   }
 });
 
 function shutdown() {
-  stopCronServer().then(() => {
+  Promise.all([stopCronServer(), stopWhatsApp()]).then(() => {
     server.close();
     process.exit(0);
   });

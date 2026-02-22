@@ -30,7 +30,7 @@ PORT=3001 npx goto-assistant
 
 ## Why goto-assistant?
 
-One command, no Docker, no framework — just MCP.
+One command, no Docker, no framework — just MCP. Chat from the web or WhatsApp.
 
 ```
         You
@@ -39,13 +39,13 @@ One command, no Docker, no framework — just MCP.
          │
          ▼
    ┌───────────┐
-   │    AI      │
-   │ Assistant  │
+   │    AI     │
+   │ Assistant │
    └──┬──┬──┬──┘
       │  │  │  │
       │  │  │  └── create / update / run /  ──▶ ┌───────┐
-      │  │  │      schedule / get results       │ Cron  │─ ─ ┐
-      │  │  └───── read / write ────────────▶ ┌─┴───────┴┐   │
+      │  │  │      schedule / get results       │ Cron  │──── ┐
+      │  │  └───── read / write ────────────▶ ┌─┴───────┴┐    │
       │  │                                    │  Files    │   │ AI tasks
       │  └──────── remember / recall ───────▶ ┌┴──────────┴┐  │ w/ MCP
       │                                       │  Memory    │◀─┘ access
@@ -147,55 +147,63 @@ goto-assistant connects directly to AI providers using your own API keys. Both A
 
 Your conversations and data stay between you and the provider's API. All local data is stored on your machine:
 
-- **goto-assistant**: conversations, config, and uploads in `~/.goto-assistant/`
+- **goto-assistant**: conversations, config, uploads, and WhatsApp auth in `~/.goto-assistant/`
 - **mcp-cron**: tasks and results in `~/.mcp-cron/`
+
+## WhatsApp Integration
+
+Chat with the assistant directly from WhatsApp — no extra apps, no Docker, no webhooks needed.
+
+Uses [Baileys](https://github.com/WhiskeySockets/Baileys) (WhatsApp Web multi-device protocol) running in-process. Enable it in the setup wizard or toggle it on the setup page, scan the QR code once, and you're connected. Auth persists across restarts.
+
+Messages go through the same AI pipeline as the web chat. The bot only responds in your self-chat ("Message yourself") — it never replies to other people messaging your number.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  Browser                                                         │
-│  ┌──────────────────────┐  ┌──────────────┐                       │
-│  │     index.html        │  │  setup.html  │                       │
-│  │  ┌───────┐ ┌────────┐ │  │  (Config +   │                       │
-│  │  │ Chat  │ │ Tasks  │ │  │   Wizard)    │                       │
-│  │  │       │ │Dashboard│ │  │              │                       │
-│  │  └───────┘ └────────┘ │  └──────┬───────┘                       │
-│  └──────────┬───────────┘         │                               │
-│             │ WebSocket            │ HTTP POST / WebSocket         │
-└─────────────┼──────────────────────┼──────────────────────────────┘
-              │                      │
-┌─────────────┼──────────────────────┼──────────────────────────────┐
-│  server.ts                         │                               │
-│  ┌──────────┴───┐  ┌──────────────┴┐                               │
-│  │  WebSocket    │  │  REST API     │                               │
-│  │  Handler      │  │  /api/*       │                               │
-│  └──────┬───────┘  └──────────────┘                               │
-│         │                                                          │
-│  ┌──────┴───────┐                                                  │
-│  │  router.ts    │──── routes by provider                          │
-│  └──┬────────┬──┘                                                  │
-│     │        │                                                     │
-│  ┌──┴──┐  ┌──┴───┐    ┌───────────────────────────────────┐       │
-│  │Claude│  │OpenAI│───▶│           MCP Servers              │       │
-│  │Agent │  │Agent │    │                                   │       │
-│  │ SDK  │  │ SDK  │    │  ┌────────┐  ┌────────────┐ ···  │       │
-│  └──┬──┘  └──┬───┘    │  │ memory │  │ filesystem  │      │       │
-│     │        │         │  └────────┘  └────────────┘      │       │
-│     │        │         │       ▲            ▲              │       │
-│     │        │         │       │            │              │       │
-│     │        │         │  ┌────┴────────────┴──────────┐  │       │
-│     │        │         │  │         mcp-cron            │  │       │
-│     │        │         │  │  AI tasks (w/ MCP access)   │  │       │
-│     │        │         │  │  + shell commands            │  │       │
-│     │        │         │  └────────────────────────────┘  │       │
-│     │        │         └───────────────────────────────────┘       │
-│     │        │                                                     │
-│  ┌──┴────────┴──┐    ┌────────────┐                                │
-│  │  sessions.ts  │───▶│  SQLite DB  │                               │
-│  │  (persistence)│    │  data/      │                               │
-│  └──────────────┘    └────────────┘                                │
-└──────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────┐  ┌────────────────────┐
+│  Browser                                   │  │  WhatsApp           │
+│  ┌───────────────────────┐  ┌────────────┐ │  │                     │
+│  │     index.html         │  │ setup.html │ │  │  Self-chat sends    │
+│  │  ┌───────┐ ┌─────────┐ │  │ (Config +  │ │  │  messages to agent  │
+│  │  │ Chat  │ │  Tasks  │ │  │  Wizard)   │ │  │                     │
+│  │  │       │ │Dashboard│ │  │            │ │  └──────────┬──────────┘
+│  │  └───────┘ └─────────┘ │  └─────┬──────┘ │             │
+│  └───────────┬────────────┘        │        │      WhatsApp servers
+│              │ WebSocket           │ HTTP   │             │ WebSocket
+└──────────────┼─────────────────────┼────────┘             │
+               │                     │                      │
+┌──────────────┼─────────────────────┼──────────────────────┼───────┐
+│  server.ts   │                     │                      │       │
+│  ┌───────────┴───┐  ┌─────────────┴─┐  ┌─────────────────┴──┐     │
+│  │  WebSocket     │  │  REST API     │  │  whatsapp.ts      │     │
+│  │  Handler       │  │  /api/*       │  │                   │     │
+│  └───────┬───────┘  └───────────────┘  └──────────┬─────────┘     │
+│          │                                         │              │
+│  ┌───────┴─────────────────────────────────────────┴──┐           │
+│  │  router.ts  ──── routes by provider                 │          │
+│  └──┬─────────┬───────────────────────────────────────┘           │
+│     │         │                                                   │
+│  ┌──┴───┐  ┌──┴───┐    ┌──────────────────────────────────  ┐     │
+│  │Claude│  │OpenAI│───▶│           MCP Servers              │     │
+│  │Agent │  │Agent │    │                                    │     │
+│  │ SDK  │  │ SDK  │    │  ┌────────┐  ┌────────────┐ ···    │     │
+│  └──┬───┘  └──┬───┘    │  │ memory │  │ filesystem │        │     │
+│     │         │         │  └────────┘  └────────────┘       │     │
+│     │         │         │       ▲            ▲              │     │
+│     │         │         │       │            │              │     │
+│     │         │         │  ┌────┴────────────┴───────────┐  │     │
+│     │         │         │  │         mcp-cron            │  │     │
+│     │         │         │  │  AI tasks (w/ MCP access)   │  │     │
+│     │         │         │  │  + shell commands           │  │     │
+│     │         │         │  └─────────────────────────────┘  │     │
+│     │         │         └────────────────────────────────────┘    │
+│     │         │                                                   │
+│  ┌──┴─────────┴──┐    ┌────────────┐                              │
+│  │  sessions.ts   │───▶│  SQLite DB  │                            │
+│  │  (persistence) │    │  data/      │                            │
+│  └───────────────┘    └────────────┘                              │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ## Development Setup

@@ -2,7 +2,7 @@
 // Provides a Q&A state machine for initial setup and AI chat for MCP server configuration.
 // Loaded as a plain <script> in the browser; importable via require() in tests.
 
-// States: provider → api_key → base_url → loading_models → model → saving → ai_chat
+// States: provider → api_key → base_url → loading_models → model → whatsapp → saving → ai_chat
 var setupChatState = {
   current: 'provider',
   provider: null,
@@ -95,11 +95,13 @@ async function saveSetupConfig(provider, apiKey, model, baseUrl, mcpServers) {
   if (model) providerConfig.model = model;
   providerConfig.baseUrl = baseUrl || '';
 
+  var waCheckbox = document.getElementById('waEnabled');
   var config = {
     provider: provider,
     claude: provider === 'claude' ? providerConfig : {},
     openai: provider === 'openai' ? providerConfig : {},
     server: { port: parseInt(document.getElementById('port').value) || 3000 },
+    whatsapp: { enabled: waCheckbox ? waCheckbox.checked : false },
     mcpServers: mcpServers,
   };
 
@@ -142,10 +144,11 @@ function connectAiChat() {
         setupChatState.streamingText = '';
         setupChatState.streamingEl = null;
         setInputMode('text');
-        // Refresh form after AI response to pick up any config changes
+        // Refresh form and restart mcp-cron after AI response to pick up any config changes
         if (typeof window.refreshForm === 'function') {
           window.refreshForm();
         }
+        fetch('/api/reload', { method: 'POST' }).catch(function () {});
       } else if (msg.type === 'error') {
         removeSetupTypingIndicator();
         addMessage('assistant', 'Error: ' + msg.text);
@@ -256,7 +259,114 @@ function handleModelSelect(modelId) {
   select.value = modelId;
   syncCronFromChat();
 
-  // Save config
+  // Check WhatsApp status before asking
+  setupChatState.current = 'whatsapp';
+  setInputMode('disabled');
+  fetch('/api/whatsapp/status')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.status === 'connected') {
+        addMessage('assistant', 'WhatsApp is already connected. Keep it enabled?');
+        showChoices([
+          { label: 'Keep enabled', value: 'keep' },
+          { label: 'Disable', value: 'disable' },
+        ], function (choice) {
+          addMessage('user', choice === 'keep' ? 'Keep enabled' : 'Disable');
+          var waCheckbox = document.getElementById('waEnabled');
+          if (waCheckbox) {
+            waCheckbox.checked = choice === 'keep';
+            waCheckbox.dispatchEvent(new Event('change'));
+          }
+          doSaveConfig(false);
+        });
+      } else {
+        showWhatsAppEnableChoices();
+      }
+    })
+    .catch(function () {
+      // If status check fails, fall back to default flow
+      showWhatsAppEnableChoices();
+    });
+}
+
+function showWhatsAppEnableChoices() {
+  addMessage('assistant', 'Would you like to enable WhatsApp integration?\n\nThis lets you message the assistant from WhatsApp (via your own self-chat). You can always enable it later from the setup page.');
+  showChoices([
+    { label: 'Skip', value: 'skip' },
+    { label: 'Enable WhatsApp', value: 'enable' },
+  ], function (choice) {
+    addMessage('user', choice === 'enable' ? 'Enable WhatsApp' : 'Skip');
+    var waCheckbox = document.getElementById('waEnabled');
+    if (choice === 'enable' && waCheckbox) {
+      waCheckbox.checked = true;
+      waCheckbox.dispatchEvent(new Event('change'));
+    }
+    doSaveConfig(choice === 'enable');
+  });
+}
+
+function startWhatsAppLinking() {
+  addMessage('assistant', 'Connecting to WhatsApp...');
+  setInputMode('disabled');
+  fetch('/api/whatsapp/connect', { method: 'POST' })
+    .then(function () { pollWhatsAppQr(); })
+    .catch(function () {
+      addMessage('assistant', 'Failed to start WhatsApp connection. You can try again from the setup form.');
+      finishSetup();
+    });
+}
+
+function pollWhatsAppQr() {
+  var timer = setInterval(async function () {
+    try {
+      var r = await fetch('/api/whatsapp/status');
+      var data = await r.json();
+
+      if (data.status === 'connected') {
+        clearInterval(timer);
+        var existingQr = document.getElementById('chatWaQr');
+        if (existingQr) existingQr.remove();
+        addMessage('assistant', 'WhatsApp connected! You can now message yourself on WhatsApp to chat with the assistant.');
+        if (typeof window.refreshForm === 'function') window.refreshForm();
+        finishSetup();
+      } else if (data.status === 'qr_ready') {
+        try {
+          var qrRes = await fetch('/api/whatsapp/qr');
+          var qrData = await qrRes.json();
+          if (qrData.qr) {
+            var existing = document.getElementById('chatWaQr');
+            if (existing) {
+              existing.src = qrData.qr;
+            } else {
+              var msgEl = addMessage('assistant', 'Scan this QR code with WhatsApp on your phone:\n\n');
+              var img = document.createElement('img');
+              img.id = 'chatWaQr';
+              img.src = qrData.qr;
+              img.alt = 'WhatsApp QR Code';
+              img.className = 'wa-qr-img';
+              msgEl.appendChild(img);
+              var container = document.getElementById('chatMessages');
+              container.scrollTop = container.scrollHeight;
+            }
+          }
+        } catch (_) {}
+      } else if (data.status === 'disconnected') {
+        clearInterval(timer);
+        addMessage('assistant', 'WhatsApp disconnected. You can try again from the setup form.');
+        finishSetup();
+      }
+    } catch (_) {}
+  }, 2000);
+}
+
+function finishSetup() {
+  setupChatState.current = 'ai_chat';
+  addMessage('assistant', 'You can now ask me to help customize your MCP servers, or close this panel and edit the form directly.');
+  setInputMode('text');
+  connectAiChat();
+}
+
+function doSaveConfig(enableWhatsApp) {
   setupChatState.current = 'saving';
   addMessage('assistant', 'Saving configuration...');
   setInputMode('disabled');
@@ -275,19 +385,19 @@ function handleModelSelect(modelId) {
     setupChatState.baseUrl,
     mcpServers
   ).then(function () {
-    // Refresh the form from backend
     if (typeof window.refreshForm === 'function') {
       return window.refreshForm();
     }
   }).then(function () {
-    setupChatState.current = 'ai_chat';
-    addMessage('assistant', 'Configuration saved! Default MCP servers configured.\n\nYou can now ask me to help customize your MCP servers, or close this panel and edit the form directly.');
-    setInputMode('text');
-    connectAiChat();
+    addMessage('assistant', 'Configuration saved! Default MCP servers configured.');
+    if (enableWhatsApp) {
+      startWhatsAppLinking();
+    } else {
+      finishSetup();
+    }
   }).catch(function (err) {
     addMessage('assistant', 'Failed to save: ' + err.message + '\n\nPlease select a model to try again:');
     setupChatState.current = 'model';
-    // Re-show model choices from the existing <select> options
     var select = document.getElementById('model');
     var options = Array.from(select.options).filter(function (o) { return o.value; });
     showChoices(options.map(function (o) {
@@ -400,6 +510,7 @@ if (typeof module !== 'undefined' && module.exports) {
     buildDefaultMcpServers: buildDefaultMcpServers,
     handleInput: handleInput,
     handleModelSelect: handleModelSelect,
+    doSaveConfig: doSaveConfig,
     initSetupChat: initSetupChat,
     syncCronFromChat: syncCronFromChat,
   };

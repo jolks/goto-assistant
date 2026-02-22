@@ -276,6 +276,19 @@ body {
   flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 
+.wa-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #25d366;
+  color: #fff;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
 .conversation-item .delete-btn {
   display: none; flex-shrink: 0; font-size: 12px; padding: 2px 6px;
   color: var(--text-muted);
@@ -1107,6 +1120,11 @@ body {
 }
 
 .chat-open-btn { margin-bottom: 1.5rem; }
+
+/* WhatsApp controls on setup page */
+.wa-btn-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.wa-status-text { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.wa-qr-img { max-width: 260px; border-radius: 10px; border: 1px solid var(--surface-border); }
 
 
 /* ====================================

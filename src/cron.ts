@@ -6,6 +6,11 @@ let cronProc: ChildProcess | null = null;
 // callCronTool() allocates from 100+ to avoid collisions.
 let nextId = 100;
 
+/** Kill an MCP stdio server. Killing npx breaks the stdin pipe, causing the child (mcp-cron) to exit on EOF. */
+function killProc(proc: ChildProcess): void {
+  try { proc.kill("SIGTERM"); } catch { /* already dead */ }
+}
+
 export function isCronRunning(): boolean {
   return cronProc !== null;
 }
@@ -136,14 +141,27 @@ export async function startCronServer(): Promise<void> {
     console.log("mcp-cron started in background");
   } catch (err) {
     cronProc = null;
-    proc.kill();
+    killProc(proc);
     throw err;
   }
+}
+
+let lastCronFingerprint: string | null = null;
+
+export async function restartCronServer(): Promise<void> {
+  const servers = loadMcpServers();
+  const cronConfig = servers["cron"];
+  const fingerprint = cronConfig ? JSON.stringify(cronConfig) : "";
+  if (fingerprint === lastCronFingerprint && cronProc) return;
+  lastCronFingerprint = fingerprint;
+  await stopCronServer();
+  await startCronServer();
 }
 
 export async function stopCronServer(): Promise<void> {
   if (!cronProc) return;
   const proc = cronProc;
   cronProc = null;
-  proc.kill();
+  lastCronFingerprint = null;
+  killProc(proc);
 }
