@@ -1,10 +1,18 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { loadMcpServers } from "./config.js";
 
 let cronProc: ChildProcess | null = null;
 // IDs 1-99 reserved for startup handshake (currently: 1=initialize, 2=list_tasks).
 // callCronTool() allocates from 100+ to avoid collisions.
 let nextId = 100;
+
+/** Kill a process tree (npx spawns child processes that must also be terminated). */
+function killProc(proc: ChildProcess): void {
+  if (!proc.pid) return;
+  // Kill child processes first (e.g. the actual mcp-cron spawned by npx)
+  try { execSync(`pkill -TERM -P ${proc.pid}`, { stdio: "ignore" }); } catch { /* no children or already dead */ }
+  try { proc.kill("SIGTERM"); } catch { /* already dead */ }
+}
 
 export function isCronRunning(): boolean {
   return cronProc !== null;
@@ -136,14 +144,19 @@ export async function startCronServer(): Promise<void> {
     console.log("mcp-cron started in background");
   } catch (err) {
     cronProc = null;
-    proc.kill();
+    killProc(proc);
     throw err;
   }
+}
+
+export async function restartCronServer(): Promise<void> {
+  await stopCronServer();
+  await startCronServer();
 }
 
 export async function stopCronServer(): Promise<void> {
   if (!cronProc) return;
   const proc = cronProc;
   cronProc = null;
-  proc.kill();
+  killProc(proc);
 }

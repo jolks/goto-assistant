@@ -144,10 +144,11 @@ function connectAiChat() {
         setupChatState.streamingText = '';
         setupChatState.streamingEl = null;
         setInputMode('text');
-        // Refresh form after AI response to pick up any config changes
+        // Refresh form and restart mcp-cron after AI response to pick up any config changes
         if (typeof window.refreshForm === 'function') {
           window.refreshForm();
         }
+        fetch('/api/reload', { method: 'POST' }).catch(function () {});
       } else if (msg.type === 'error') {
         removeSetupTypingIndicator();
         addMessage('assistant', 'Error: ' + msg.text);

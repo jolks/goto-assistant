@@ -5,12 +5,29 @@ import path from "node:path";
 import multer from "multer";
 import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig, type WhatsAppConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
-import { startCronServer, callCronTool, isCronRunning } from "./cron.js";
+import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
 import { saveUpload, getUpload, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
 import { SETUP_SYSTEM_PROMPT, TASK_SYSTEM_PROMPT, TASK_CREATE_SYSTEM_PROMPT } from "./prompts.js";
+
+/** Re-read config from disk and restart mcp-cron + WhatsApp as needed. */
+function reloadServices(config?: Config): void {
+  const cfg = config ?? (isConfigured() ? loadConfig() : undefined);
+  restartCronServer().catch((err) =>
+    console.error("Failed to restart mcp-cron:", err)
+  );
+  if (cfg?.whatsapp?.enabled) {
+    startWhatsApp().catch((err) =>
+      console.error("Failed to start WhatsApp:", err)
+    );
+  } else {
+    stopWhatsApp().catch((err) =>
+      console.error("Failed to stop WhatsApp:", err)
+    );
+  }
+}
 
 export function createApp(): Express {
   const app = express();
@@ -105,19 +122,7 @@ export function createApp(): Express {
       const mergedMcp = unmaskMcpServers(mcpServers, existingMcp, config);
       saveMcpServers(mergedMcp);
     }
-    startCronServer().catch((err) =>
-      console.error("Failed to start mcp-cron:", err)
-    );
-    // Start or stop WhatsApp based on config
-    if (config.whatsapp?.enabled) {
-      startWhatsApp().catch((err) =>
-        console.error("Failed to start WhatsApp:", err)
-      );
-    } else {
-      stopWhatsApp().catch((err) =>
-        console.error("Failed to stop WhatsApp:", err)
-      );
-    }
+    reloadServices(config);
     res.json({ ok: true });
   });
 
@@ -245,6 +250,13 @@ export function createApp(): Express {
     id: req.params.id,
     limit: parseInt(req.query.limit as string) || 1,
   }));
+
+  // --- Reload services (re-read config from disk, restart cron + WhatsApp) ---
+
+  app.post("/api/reload", (_req, res) => {
+    reloadServices();
+    res.json({ ok: true });
+  });
 
   // --- WhatsApp endpoints ---
 

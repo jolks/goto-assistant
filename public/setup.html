@@ -286,19 +286,12 @@
       };
 
       try {
-        const [configRes, mcpRes] = await Promise.all([
-          fetch('/api/setup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config),
-          }),
-          fetch('/api/mcp-servers', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mcpServers }),
-          }),
-        ]);
-        if (!configRes.ok || !mcpRes.ok) { showStatus('Failed to save config', 'error'); return; }
+        const configRes = await fetch('/api/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...config, mcpServers }),
+        });
+        if (!configRes.ok) { showStatus('Failed to save config', 'error'); return; }
         window.location.href = '/';
       } catch (e) {
         showStatus('Failed to save config', 'error');
