@@ -20,6 +20,7 @@ export const CONFIG_PATH = path.join(DATA_DIR, "config.json");
 export const MCP_CONFIG_PATH = path.join(DATA_DIR, "mcp.json");
 export const MEMORY_FILE_PATH = path.join(DATA_DIR, "memory.json");
 export const MEMORY_SERVER_NAME = "memory";
+export const MAX_AGENT_TURNS = 30;
 
 export function isConfigured(): boolean {
   return fs.existsSync(CONFIG_PATH);

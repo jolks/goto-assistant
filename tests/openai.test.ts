@@ -19,26 +19,31 @@ vi.mock("../src/uploads.js", () => ({
 }));
 
 // Mock @openai/agents before importing runOpenAI
-vi.mock("@openai/agents", () => {
+const mockRun = vi.fn().mockImplementation((_agent: unknown, input: unknown) => {
+  capturedInput = input;
+  return {
+    [Symbol.asyncIterator]: async function* () {
+      // yield nothing — we just care about the input
+    },
+  };
+});
+
+vi.mock("@openai/agents", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openai/agents")>();
   return {
     Agent: vi.fn().mockImplementation(() => ({})),
     MCPServerStdio: vi.fn().mockImplementation(() => ({
       connect: vi.fn(),
       close: vi.fn(),
     })),
-    run: vi.fn().mockImplementation((_agent: unknown, input: unknown) => {
-      capturedInput = input;
-      return {
-        [Symbol.asyncIterator]: async function* () {
-          // yield nothing — we just care about the input
-        },
-      };
-    }),
+    run: mockRun,
     shellTool: vi.fn().mockImplementation(() => ({ type: "shell", name: "shell" })),
+    MaxTurnsExceededError: actual.MaxTurnsExceededError,
   };
 });
 
 const { runOpenAI } = await import("../src/agents/openai.js");
+const { MaxTurnsExceededError } = await import("@openai/agents");
 
 const config: Config = {
   provider: "openai",
@@ -130,5 +135,28 @@ describe("openai input construction", () => {
 
     expect(messages[1]).toEqual({ role: "assistant", content: [{ type: "output_text", text: "I see an image" }] });
     expect(messages[2]).toEqual({ role: "user", content: "and this?" });
+  });
+});
+
+describe("openai max turns handling", () => {
+  it("sends a user-friendly message when MaxTurnsExceededError is thrown", async () => {
+    mockRun.mockImplementationOnce(() => {
+      throw new MaxTurnsExceededError("Max turns (30) exceeded");
+    });
+
+    const chunks: string[] = [];
+    await runOpenAI("do something complex", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks.join("")).toContain("reached the maximum number of tool-use turns");
+  });
+
+  it("re-throws non-MaxTurnsExceededError errors", async () => {
+    mockRun.mockImplementationOnce(() => {
+      throw new Error("API connection failed");
+    });
+
+    await expect(
+      runOpenAI("hello", config, mcpServers, vi.fn())
+    ).rejects.toThrow("API connection failed");
   });
 });

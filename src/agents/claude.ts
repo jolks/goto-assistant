@@ -1,6 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Config, McpServerConfig } from "../config.js";
-import { MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
+import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment } from "./router.js";
 
 export interface ClaudeOptions {
@@ -52,7 +52,7 @@ export async function runClaude(
     allowedTools: Object.keys(mcpServersConfig).map((name) => `mcp__${name}__*`),
     systemPrompt: systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
     env,
-    maxTurns: 30,
+    maxTurns: MAX_AGENT_TURNS,
   };
 
   if (resumeSessionId) {
@@ -98,6 +98,12 @@ export async function runClaude(
       if (resultMsg.result) {
         onChunk(resultMsg.result);
       }
+    }
+
+    if (message.type === "result" && message.subtype === "error_max_turns") {
+      const resultMsg = message as { session_id?: string };
+      sessionId = resultMsg.session_id ?? sessionId;
+      onChunk(`\n\n[Stopped: reached the maximum number of tool-use turns (${MAX_AGENT_TURNS}). You can continue the conversation to pick up where I left off.]`);
     }
   }
 

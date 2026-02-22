@@ -5,16 +5,18 @@ import type { Attachment } from "../src/agents/router.js";
 // Capture what gets passed to query()
 let capturedPrompt: unknown = null;
 
-// Mock the Claude Agent SDK
+// Mock the Claude Agent SDK — default yields a success result
+const mockQuery = vi.fn().mockImplementation(({ prompt }: { prompt: unknown }) => {
+  capturedPrompt = prompt;
+  return {
+    [Symbol.asyncIterator]: async function* () {
+      yield { type: "result", subtype: "success", session_id: "sess-1", result: "response" };
+    },
+  };
+});
+
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: vi.fn().mockImplementation(({ prompt }: { prompt: unknown }) => {
-    capturedPrompt = prompt;
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        yield { type: "result", subtype: "success", session_id: "sess-1", result: "response" };
-      },
-    };
-  }),
+  query: mockQuery,
 }));
 
 const { runClaude } = await import("../src/agents/claude.js");
@@ -74,5 +76,36 @@ describe("claude prompt construction", () => {
     expect(prompt).toContain("/uploads/id1/a.png");
     expect(prompt).toContain("/uploads/id2/b.jpg");
     expect(prompt).toContain("2 image(s)");
+  });
+});
+
+describe("claude max turns handling", () => {
+  it("sends a user-friendly message when max turns is exceeded", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: "result", subtype: "error_max_turns", session_id: "sess-max" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    const result = await runClaude("do something complex", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks.join("")).toContain("reached the maximum number of tool-use turns");
+    expect(result.sessionId).toBe("sess-max");
+  });
+
+  it("still returns sessionId from init when max turns has no session_id", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: "system", subtype: "init", session_id: "sess-init" };
+        yield { type: "result", subtype: "error_max_turns" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    const result = await runClaude("complex task", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks.join("")).toContain("reached the maximum number of tool-use turns");
+    expect(result.sessionId).toBe("sess-init");
   });
 });

@@ -59,6 +59,8 @@ git tag v<version> && git push origin v<version>
 - **OpenAI**: Stateless — has no session resumption. We must load the full message history from SQLite and pass it as the input array on every turn. See `runOpenAI()` which builds `inputMessages` from `history` parameter. Assistant messages must use `content: [{ type: "output_text", text }]` format (not plain strings) or the SDK throws `item.content.map is not a function`.
 - When adding new per-message features (attachments, metadata, etc.), ensure both history paths are updated.
 
+**Agent turn limits**: Both providers use `MAX_AGENT_TURNS` (defined in `src/config.ts`, currently 30) to cap tool-use loop iterations. When the limit is hit, a user-friendly message is sent via `onChunk` and the conversation ends gracefully. Claude returns an `error_max_turns` result event; OpenAI throws `MaxTurnsExceededError` (caught in `runOpenAI`).
+
 **Image attachments** (critical provider difference):
 - **OpenAI**: Images are passed inline as base64 `input_image` content blocks in the message array. History messages with attachments get their image data re-read from `data/uploads/` via `getUpload()`.
 - **Claude**: The Agent SDK's `query()` only accepts a plain string prompt — passing structured content (e.g. AsyncIterable) crashes the subprocess. Instead, image file paths are appended to the prompt text, and Claude reads them via the filesystem MCP server's `read_media_file` tool. This means the filesystem MCP server must be configured for image upload to work with Claude.
