@@ -57,6 +57,27 @@ One command, no Docker, no framework — just MCP.
 
 That one `npx` command gives you an AI assistant that can remember across conversations, manage your files, and run tasks on a schedule or on-demand — all through the standard [MCP protocol](https://modelcontextprotocol.io). Add any MCP server to extend it further.
 
+## Data Privacy
+
+goto-assistant connects directly to AI providers using your own API keys. Both Anthropic and OpenAI have clear policies that API data is **not used for model training** by default:
+
+**Anthropic** ([Commercial Terms](https://www.anthropic.com/legal/commercial-terms); [Privacy Center](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training)):
+
+> "Anthropic may not train models on Customer Content from Services."
+
+> "By default, we will not use your inputs or outputs from our commercial products to train our models."
+
+**OpenAI** ([Platform Data Controls](https://platform.openai.com/docs/guides/your-data); [Enterprise Privacy](https://openai.com/enterprise-privacy/)):
+
+> "Data sent to the OpenAI API is not used to train or improve OpenAI models (unless you explicitly opt in to share data with us)."
+
+> "We do not train our models on your data by default."
+
+Your conversations and data stay between you and the provider's API. All local data is stored on your machine:
+
+- **goto-assistant**: conversations, config, and uploads in `~/.goto-assistant/`
+- **mcp-cron**: tasks and results in `~/.mcp-cron/`
+
 ## Architecture
 
 ```
