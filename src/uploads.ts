@@ -28,7 +28,7 @@ export function saveUpload(
   const fileId = crypto.randomUUID();
   const dir = path.join(UPLOADS_DIR, fileId);
   fs.mkdirSync(dir, { recursive: true });
-  const filePath = path.join(dir, filename);
+  const filePath = path.join(dir, path.basename(filename));
   fs.writeFileSync(filePath, buffer);
   return { fileId, filename, mimeType, size: buffer.length, path: filePath };
 }
