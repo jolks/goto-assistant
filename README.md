@@ -169,7 +169,7 @@ Chat with the assistant directly from WhatsApp — no extra apps, no Docker, no 
 
 Uses [Baileys](https://github.com/WhiskeySockets/Baileys) (WhatsApp Web multi-device protocol) running in-process. Enable it in the setup wizard or toggle it on the setup page, scan the QR code once, and you're connected. Auth persists across restarts.
 
-Messages go through the same AI pipeline as the web chat. The bot only responds in your self-chat ("Message yourself") — it never replies to other people messaging your number.
+Messages go through the same AI pipeline as the web chat. The agent only responds in your self-chat ("Message yourself") — it never replies to other people messaging your number.
 
 ## Architecture
 

@@ -36,7 +36,7 @@ let shouldReconnect = true;
 // Per-chatId queue: serialize message processing so concurrent messages don't collide
 const chatQueues = new Map<string, Promise<void>>();
 
-// Track message IDs sent by the bot to avoid processing our own replies
+// Track message IDs sent by the agent to avoid processing our own replies
 const sentMessageIds = new Set<string>();
 const MAX_SENT_IDS = 500;
 
@@ -96,7 +96,7 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
   const isSelfChat = ownJid && msg.key.remoteJid === ownJid;
   if (!isSelfChat) return;
 
-  // Skip messages the bot itself sent (prevents infinite loops)
+  // Skip messages the agent itself sent (prevents infinite loops)
   if (msg.key.id && sentMessageIds.has(msg.key.id)) return;
 
   const chatId = msg.key.remoteJid;
