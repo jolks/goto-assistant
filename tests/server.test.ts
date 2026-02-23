@@ -532,12 +532,12 @@ describe("server", () => {
       expect(body.error).toContain("channel is required");
     });
 
-    it("POST /api/messaging/send returns 400 when message is missing", async () => {
+    it("POST /api/messaging/send returns 400 when neither message nor media is provided", async () => {
       const app = createApp();
       const res = await makeRequest(app, "POST", "/api/messaging/send", true, { channel: "whatsapp" });
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toContain("message is required");
+      expect(body.error).toContain("message or media is required");
     });
 
     it("POST /api/messaging/send returns 400 for unknown channel", async () => {
@@ -611,6 +611,51 @@ describe("server", () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe("WhatsApp is not connected");
+    });
+
+    it("POST /api/messaging/send forwards media option to channel send function", async () => {
+      let capturedOptions: { media?: string } | undefined;
+      registerChannel("whatsapp", async (_message, _to, options) => {
+        capturedOptions = options;
+        return 1;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "caption",
+        media: "/tmp/photo.jpg",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(capturedOptions).toEqual({ media: "/tmp/photo.jpg" });
+    });
+
+    it("POST /api/messaging/send succeeds with media only (no message)", async () => {
+      let capturedMessage: string | undefined;
+      registerChannel("whatsapp", async (message) => {
+        capturedMessage = message;
+        return 1;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        media: "/tmp/photo.jpg",
+      });
+      expect(res.status).toBe(200);
+      expect(capturedMessage).toBe("");
+    });
+
+    it("POST /api/messaging/send returns 400 when media is non-string", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+        media: 123,
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("media must be a string");
     });
   });
 

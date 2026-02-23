@@ -22,15 +22,16 @@ function makeError(id: number | string, code: number, message: string) {
 const TOOLS = [
   {
     name: "send_message",
-    description: "Send a message via a connected messaging channel (e.g. WhatsApp). Use list_channels to see available channels.",
+    description: "Send a message via a connected messaging channel (e.g. WhatsApp). Supports text, media (image/video/audio/document), or both. Use list_channels to see available channels.",
     inputSchema: {
       type: "object",
       properties: {
         channel: { type: "string", description: 'Messaging channel (e.g. "whatsapp")' },
-        message: { type: "string", description: "Text message to send" },
+        message: { type: "string", description: "Text message to send (becomes caption when media is provided)" },
         to: { type: "string", description: 'Recipient — phone number (e.g. "+60123456789") or "self" (default: self)' },
+        media: { type: "string", description: "Local file path or URL to a media file to send (image, video, audio, document). When provided, 'message' becomes the caption." },
       },
-      required: ["channel", "message"],
+      required: ["channel"],
     },
   },
   {
@@ -57,9 +58,21 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
   }
 
   if (name === "send_message") {
-    const { channel, message, to } = args;
-    if (!channel || typeof channel !== "string" || !message || typeof message !== "string") {
-      respond(makeResult(id, [{ type: "text", text: "Error: channel and message are required and must be strings" }]));
+    const { channel, message, to, media } = args;
+    if (!channel || typeof channel !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: channel is required and must be a string" }]));
+      return;
+    }
+    if (!message && !media) {
+      respond(makeResult(id, [{ type: "text", text: "Error: message or media is required" }]));
+      return;
+    }
+    if (message !== undefined && typeof message !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: message must be a string" }]));
+      return;
+    }
+    if (media !== undefined && typeof media !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: media must be a string" }]));
       return;
     }
     if (to !== undefined && typeof to !== "string") {
@@ -67,10 +80,15 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
       return;
     }
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic payload
+      const payload: Record<string, any> = { channel };
+      if (message) payload.message = message;
+      if (media) payload.media = media;
+      if (to) payload.to = to;
       const res = await fetch(`${BASE_URL}/api/messaging/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel, message, to }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json() as Record<string, unknown>;
       if (!res.ok) {

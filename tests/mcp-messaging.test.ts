@@ -198,7 +198,7 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
     }
   });
 
-  it("send_message returns error when channel/message missing", async () => {
+  it("send_message returns error when neither message nor media provided", async () => {
     const proc = spawnServer(`http://localhost:${mockPort}`);
     try {
       await handshake(proc);
@@ -209,7 +209,7 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
         params: { name: "send_message", arguments: { channel: "whatsapp" } },
       });
       const content = (res.result as { content: Array<{ text: string }> }).content;
-      expect(content[0].text).toContain("channel and message are required");
+      expect(content[0].text).toContain("message or media is required");
       // Should not have made an HTTP request
       expect(lastRequest).toBeUndefined();
     } finally {
@@ -228,7 +228,7 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
         params: { name: "send_message", arguments: { channel: 123, message: "hi" } },
       });
       const content = (res.result as { content: Array<{ text: string }> }).content;
-      expect(content[0].text).toContain("channel and message are required and must be strings");
+      expect(content[0].text).toContain("channel is required and must be a string");
       // Should not have made an HTTP request
       expect(lastRequest).toBeUndefined();
     } finally {
@@ -252,6 +252,52 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
       });
       const content = (res.result as { content: Array<{ text: string }> }).content;
       expect(content[0].text).toContain('Unknown channel: "telegram"');
+    } finally {
+      proc.kill();
+    }
+  });
+
+  it("send_message with media proxies correctly to HTTP endpoint", async () => {
+    mockResponse = { status: 200, body: { ok: true, channel: "whatsapp", partsSent: 1 } };
+    const proc = spawnServer(`http://localhost:${mockPort}`);
+    try {
+      await handshake(proc);
+      const res = await rpc(proc, {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: {
+          name: "send_message",
+          arguments: { channel: "whatsapp", message: "Check this out", media: "/tmp/photo.jpg" },
+        },
+      });
+      expect(lastRequest?.method).toBe("POST");
+      expect(lastRequest?.url).toBe("/api/messaging/send");
+      expect(lastRequest?.body).toEqual({ channel: "whatsapp", message: "Check this out", media: "/tmp/photo.jpg" });
+      const content = (res.result as { content: Array<{ text: string }> }).content;
+      expect(JSON.parse(content[0].text)).toEqual({ ok: true, channel: "whatsapp", partsSent: 1 });
+    } finally {
+      proc.kill();
+    }
+  });
+
+  it("send_message with media only (no message) proxies correctly", async () => {
+    mockResponse = { status: 200, body: { ok: true, channel: "whatsapp", partsSent: 1 } };
+    const proc = spawnServer(`http://localhost:${mockPort}`);
+    try {
+      await handshake(proc);
+      const res = await rpc(proc, {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: {
+          name: "send_message",
+          arguments: { channel: "whatsapp", media: "https://example.com/photo.png" },
+        },
+      });
+      expect(lastRequest?.body).toEqual({ channel: "whatsapp", media: "https://example.com/photo.png" });
+      const content = (res.result as { content: Array<{ text: string }> }).content;
+      expect(JSON.parse(content[0].text)).toEqual({ ok: true, channel: "whatsapp", partsSent: 1 });
     } finally {
       proc.kill();
     }

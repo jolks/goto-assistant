@@ -10,7 +10,8 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
 import { DATA_DIR, loadConfig, loadMcpServers } from "./config.js";
-import { registerChannel, unregisterChannel } from "./messaging.js";
+import fs from "node:fs";
+import { registerChannel, unregisterChannel, type SendMediaOptions } from "./messaging.js";
 import { routeMessage } from "./agents/router.js";
 import type { Attachment } from "./agents/router.js";
 import {
@@ -316,14 +317,47 @@ export async function stopWhatsApp(): Promise<void> {
   }
 }
 
+const MIME_MAP: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
+  webp: "image/webp", mp4: "video/mp4", avi: "video/x-msvideo", mov: "video/quicktime",
+  mkv: "video/x-matroska", mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav",
+  pdf: "application/pdf", doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  zip: "application/zip",
+};
+
+/** Look up MIME type from file extension. Works for both local paths and URLs. */
+export function lookupMimeType(source: string): string {
+  // For URLs, extract the path portion before checking extension
+  let pathname = source;
+  if (source.startsWith("http://") || source.startsWith("https://")) {
+    try { pathname = new URL(source).pathname; } catch { /* use source as-is */ }
+  }
+  const ext = pathname.split(".").pop()?.toLowerCase() ?? "";
+  return MIME_MAP[ext] ?? "application/octet-stream";
+}
+
+/** Classify a MIME type into a WhatsApp media category. */
+export function classifyMediaType(mimeType: string): "image" | "video" | "audio" | "document" {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "document";
+}
+
+const MAX_MEDIA_SIZE = 64 * 1024 * 1024; // 64MB WhatsApp limit
+
 /**
  * Send a text message via WhatsApp.
  * Concurrent calls are safe — Baileys serializes sendMessage internally.
  * @param text - Message content to send
  * @param to - Phone number (e.g. "+60123456789") or "self"/undefined for self-chat
+ * @param options - Optional media attachment
  * @returns Number of message parts sent
  */
-export async function sendWhatsAppMessage(text: string, to?: string): Promise<number> {
+export async function sendWhatsAppMessage(text: string, to?: string, options?: SendMediaOptions): Promise<number> {
   // Validate phone number before checking socket so it can be tested without a connection
   let jid: string | undefined;
   if (to && to !== "self") {
@@ -342,6 +376,47 @@ export async function sendWhatsAppMessage(text: string, to?: string): Promise<nu
 
   const isSelf = jid === getOwnJid();
 
+  // Media path: send a single media message
+  if (options?.media) {
+    const media = options.media;
+    const isUrl = media.startsWith("http://") || media.startsWith("https://");
+
+    // Validate local files
+    if (!isUrl) {
+      const stat = fs.statSync(media, { throwIfNoEntry: false });
+      if (!stat || !stat.isFile()) throw new Error(`Media file not found: ${media}`);
+      if (stat.size > MAX_MEDIA_SIZE) throw new Error(`Media file exceeds 64MB limit: ${media}`);
+    }
+
+    const mimeType = lookupMimeType(media);
+    const mediaType = classifyMediaType(mimeType);
+    const caption = text || undefined;
+    const source = { url: media };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Baileys content types vary
+    let content: Record<string, any>;
+    switch (mediaType) {
+      case "image":
+        content = { image: source, caption };
+        break;
+      case "video":
+        content = { video: source, caption };
+        break;
+      case "audio":
+        content = { audio: source }; // audio has no caption support
+        break;
+      case "document":
+        content = { document: source, mimetype: mimeType, fileName: path.basename(media), caption };
+        break;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- content is built dynamically from a known-safe switch
+    const sent = await sock.sendMessage(jid, content as any);
+    if (isSelf && sent?.key?.id) trackSentId(sent.key.id);
+    return 1;
+  }
+
+  // Text-only path: split long messages
   const parts = splitMessage(text);
   for (const part of parts) {
     const sent = await sock.sendMessage(jid, { text: part });

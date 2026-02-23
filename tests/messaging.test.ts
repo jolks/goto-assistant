@@ -78,5 +78,17 @@ describe("messaging", () => {
       });
       await expect(sendMessage("whatsapp", "hi")).rejects.toThrow("Not connected");
     });
+
+    it("forwards options with media to the send function", async () => {
+      let capturedArgs: { message: string; to?: string; options?: { media?: string } } | undefined;
+      registerChannel("whatsapp", async (message, to, options) => {
+        capturedArgs = { message, to, options };
+        return 1;
+      });
+
+      const result = await sendMessage("whatsapp", "caption", "self", { media: "/tmp/photo.jpg" });
+      expect(result).toBe(1);
+      expect(capturedArgs).toEqual({ message: "caption", to: "self", options: { media: "/tmp/photo.jpg" } });
+    });
   });
 });

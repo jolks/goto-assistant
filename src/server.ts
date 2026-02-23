@@ -262,13 +262,21 @@ export function createApp(): Express {
   });
 
   app.post("/api/messaging/send", async (req, res) => {
-    const { channel, message, to } = req.body;
+    const { channel, message, to, media } = req.body;
     if (!channel || typeof channel !== "string") {
       res.status(400).json({ error: "channel is required" });
       return;
     }
-    if (!message || typeof message !== "string") {
-      res.status(400).json({ error: "message is required" });
+    if (!message && !media) {
+      res.status(400).json({ error: "message or media is required" });
+      return;
+    }
+    if (message !== undefined && typeof message !== "string") {
+      res.status(400).json({ error: "message must be a string" });
+      return;
+    }
+    if (media !== undefined && typeof media !== "string") {
+      res.status(400).json({ error: "media must be a string" });
       return;
     }
     if (to !== undefined && typeof to !== "string") {
@@ -276,7 +284,8 @@ export function createApp(): Express {
       return;
     }
     try {
-      const partsSent = await sendMessage(channel, message, to);
+      const options = media ? { media } : undefined;
+      const partsSent = await sendMessage(channel, message ?? "", to, options);
       res.json({ ok: true, channel, partsSent });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
