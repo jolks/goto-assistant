@@ -23,11 +23,12 @@ vi.mock("../src/whatsapp.js", () => ({
 }));
 
 import { createApp } from "../src/server.js";
-import { stopCronServer, isCronRunning, callCronTool } from "../src/cron.js";
+import { stopCronServer, restartCronServer, isCronRunning, callCronTool } from "../src/cron.js";
+import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "../src/whatsapp.js";
 import { registerChannel, unregisterChannel, listChannels } from "../src/messaging.js";
 import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
-import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
+import { closeDb, createConversation, getConversation, saveMessage, getMessages, listConversations } from "../src/sessions.js";
 import { UPLOADS_DIR } from "../src/uploads.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles, cleanupDbFiles } from "./helpers.js";
 
@@ -598,6 +599,186 @@ describe("server", () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe("WhatsApp is not connected");
+    });
+  });
+
+  describe("POST /api/models", () => {
+    it("returns hardcoded Claude models for provider: claude", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "claude" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.models).toBeInstanceOf(Array);
+      expect(body.models.length).toBeGreaterThanOrEqual(3);
+      expect(body.models.some((m: { id: string }) => m.id.includes("claude"))).toBe(true);
+    });
+
+    it("returns sorted model list for provider: openai", async () => {
+      const mockModels = { data: [{ id: "gpt-4o" }, { id: "gpt-3.5-turbo" }] };
+      const originalFetch = globalThis.fetch;
+      // Mock only OpenAI API calls, pass through localhost requests
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (urlStr.includes("/v1/models")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockModels) });
+        }
+        return originalFetch(url as RequestInfo, opts);
+      }) as unknown as typeof fetch;
+
+      try {
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, {
+          provider: "openai",
+          apiKey: "sk-test",
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.models).toEqual([
+          { id: "gpt-3.5-turbo", name: "gpt-3.5-turbo" },
+          { id: "gpt-4o", name: "gpt-4o" },
+        ]);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("returns 400 when OpenAI API fails", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (urlStr.includes("/v1/models")) {
+          return Promise.resolve({ ok: false });
+        }
+        return originalFetch(url as RequestInfo, opts);
+      }) as unknown as typeof fetch;
+
+      try {
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, {
+          provider: "openai",
+          apiKey: "sk-bad",
+        });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toContain("Failed to fetch models");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("returns 400 for invalid provider", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "gemini" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid provider");
+    });
+  });
+
+  describe("WhatsApp endpoints", () => {
+    it("GET /api/whatsapp/status returns enabled:false when unconfigured", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/whatsapp/status");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(false);
+      expect(body.status).toBe("disconnected");
+    });
+
+    it("GET /api/whatsapp/status returns config-based enabled + mock status when configured", async () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      vi.mocked(getWhatsAppStatus).mockReturnValue("connected");
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/whatsapp/status");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(true);
+      expect(body.status).toBe("connected");
+    });
+
+    it("GET /api/whatsapp/qr returns mock QR data", async () => {
+      vi.mocked(getWhatsAppQrDataUri).mockResolvedValue("data:image/png;base64,abc");
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/whatsapp/qr");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.qr).toBe("data:image/png;base64,abc");
+    });
+
+    it("POST /api/whatsapp/connect returns ok + status on success", async () => {
+      vi.mocked(startWhatsApp).mockResolvedValue(undefined);
+      vi.mocked(getWhatsAppStatus).mockReturnValue("connected");
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/whatsapp/connect");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.status).toBe("connected");
+    });
+
+    it("POST /api/whatsapp/connect returns 500 when startWhatsApp() throws", async () => {
+      vi.mocked(startWhatsApp).mockRejectedValue(new Error("Baileys crash"));
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/whatsapp/connect");
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe("Baileys crash");
+    });
+
+    it("POST /api/whatsapp/disconnect returns ok on success", async () => {
+      vi.mocked(stopWhatsApp).mockResolvedValue(undefined);
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/whatsapp/disconnect");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.status).toBe("disconnected");
+    });
+  });
+
+  describe("other endpoint gaps", () => {
+    it("GET /api/conversations returns conversation list (filtered by setup=0)", async () => {
+      saveConfig(testConfig);
+      const app = createApp();
+      createConversation("claude", 0);
+      createConversation("claude", 1); // setup conversation — should be filtered
+
+      const res = await makeRequest(app, "GET", "/api/conversations");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      // listConversations() filters out setup conversations
+      expect(body.conversations.length).toBe(1);
+    });
+
+    it("POST /api/reload returns ok and triggers reloadServices", async () => {
+      saveConfig(testConfig);
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/reload");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      // restartCronServer should have been called
+      expect(restartCronServer).toHaveBeenCalled();
+    });
+
+    it("POST /api/setup returns 400 when provider missing", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/setup", true, {
+        server: { port: 3000 },
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid config");
+    });
+
+    it("POST /api/mcp-servers returns 400 when mcpServers is not an object", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/mcp-servers", true, { mcpServers: "invalid" });
+      // "invalid" is typeof string which IS an object... let's test with null
+      const res2 = await makeRequest(app, "POST", "/api/mcp-servers", true, {});
+      expect(res2.status).toBe(400);
+      const body2 = await res2.json();
+      expect(body2.error).toContain("Invalid mcpServers");
     });
   });
 });

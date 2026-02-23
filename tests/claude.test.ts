@@ -109,3 +109,76 @@ describe("claude max turns handling", () => {
     expect(result.sessionId).toBe("sess-init");
   });
 });
+
+describe("claude assistant message streaming", () => {
+  it("calls onChunk for text content blocks in assistant messages", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield {
+          type: "assistant",
+          content: [
+            { type: "text", text: "Hello " },
+            { type: "text", text: "world" },
+          ],
+        };
+        yield { type: "result", subtype: "success", session_id: "sess-2" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    await runClaude("hi", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks).toContain("Hello ");
+    expect(chunks).toContain("world");
+  });
+
+  it("skips non-text content blocks (e.g. tool_use)", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield {
+          type: "assistant",
+          content: [
+            { type: "tool_use", id: "t1", name: "read_graph" },
+            { type: "text", text: "only this" },
+          ],
+        };
+        yield { type: "result", subtype: "success", session_id: "sess-3" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    await runClaude("hi", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks).toEqual(["only this"]);
+  });
+});
+
+describe("claude result text emission", () => {
+  it("emits result text via onChunk on success", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: "result", subtype: "success", session_id: "sess-4", result: "Final answer" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    await runClaude("question", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks).toContain("Final answer");
+  });
+
+  it("returns sessionId from init event when result has none", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: "system", subtype: "init", session_id: "sess-from-init" };
+        yield { type: "result", subtype: "success", result: "done" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    const result = await runClaude("hi", config, mcpServers, (text) => chunks.push(text));
+
+    expect(result.sessionId).toBe("sess-from-init");
+    expect(chunks).toContain("done");
+  });
+});
