@@ -327,7 +327,7 @@ export async function sendWhatsAppMessage(text: string, to?: string): Promise<nu
   let jid: string | undefined;
   if (to && to !== "self") {
     const digits = to.replace(/\D/g, "");
-    if (digits.length < 7) throw new Error("Invalid phone number");
+    if (digits.length < 7) throw new Error("Invalid phone number"); // shortest international numbers are ~7 digits
     jid = `${digits}@s.whatsapp.net`;
   }
 

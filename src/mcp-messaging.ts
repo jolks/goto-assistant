@@ -125,11 +125,16 @@ function handleMessage(line: string): void {
   }
 
   if (method === "tools/call") {
-    const toolName = (params as { name: string }).name;
-    const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {};
+    if (id === undefined) return; // notifications don't get responses
+    const toolName = params?.name as string | undefined;
+    if (!toolName) {
+      respond(makeError(id, -32602, "Invalid params: missing tool name"));
+      return;
+    }
+    const toolArgs = (params?.arguments ?? {}) as Record<string, unknown>;
     // .catch: tool errors are returned as content text per MCP spec, not as JSON-RPC errors
-    handleToolCall(id!, toolName, toolArgs).catch((err) => {
-      respond(makeResult(id!, [{ type: "text", text: `Internal error: ${(err as Error).message}` }]));
+    handleToolCall(id, toolName, toolArgs).catch((err) => {
+      respond(makeResult(id, [{ type: "text", text: `Internal error: ${(err as Error).message}` }]));
     });
     return;
   }

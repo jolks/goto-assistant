@@ -253,6 +253,24 @@ describe("mcp-messaging", () => {
     }
   });
 
+  it("returns -32602 error when tools/call has no tool name", async () => {
+    const proc = spawnServer(`http://localhost:${mockPort}`);
+    try {
+      await handshake(proc);
+      const res = await rpc(proc, {
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tools/call",
+        params: { arguments: {} },
+      });
+      expect(res.error).toBeDefined();
+      expect((res.error as { code: number }).code).toBe(-32602);
+      expect((res.error as { message: string }).message).toContain("missing tool name");
+    } finally {
+      proc.kill();
+    }
+  });
+
   it("returns -32600 error when method is missing", async () => {
     const proc = spawnServer(`http://localhost:${mockPort}`);
     try {
