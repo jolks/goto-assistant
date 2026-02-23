@@ -57,9 +57,13 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
   }
 
   if (name === "send_message") {
-    const { channel, message, to } = args as { channel: string; message: string; to?: string };
-    if (!channel || !message) {
-      respond(makeResult(id, [{ type: "text", text: "Error: channel and message are required" }]));
+    const { channel, message, to } = args;
+    if (!channel || typeof channel !== "string" || !message || typeof message !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: channel and message are required and must be strings" }]));
+      return;
+    }
+    if (to !== undefined && typeof to !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: to must be a string if provided" }]));
       return;
     }
     try {
@@ -107,6 +111,7 @@ function handleMessage(line: string): void {
       jsonrpc: "2.0",
       id,
       result: {
+        // Hardcoded — update when MCP spec adds new versions.
         protocolVersion: "2024-11-05",
         capabilities: { tools: {} },
         serverInfo: { name: "goto-assistant-messaging", version: "1.0.0" },

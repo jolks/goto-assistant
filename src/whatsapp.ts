@@ -318,6 +318,7 @@ export async function stopWhatsApp(): Promise<void> {
 
 /**
  * Send a text message via WhatsApp.
+ * Concurrent calls are safe — Baileys serializes sendMessage internally.
  * @param text - Message content to send
  * @param to - Phone number (e.g. "+60123456789") or "self"/undefined for self-chat
  * @returns Number of message parts sent

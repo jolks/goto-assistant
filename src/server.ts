@@ -271,6 +271,10 @@ export function createApp(): Express {
       res.status(400).json({ error: "message is required" });
       return;
     }
+    if (to !== undefined && typeof to !== "string") {
+      res.status(400).json({ error: "to must be a string" });
+      return;
+    }
     try {
       const partsSent = await sendMessage(channel, message, to);
       res.json({ ok: true, channel, partsSent });

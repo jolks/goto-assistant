@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
 const MCP_SERVER_PATH = path.resolve(import.meta.dirname, "..", "dist", "mcp-messaging.js");
+const distExists = fs.existsSync(MCP_SERVER_PATH);
 
 /** Spawn the MCP messaging server with a given GOTO_ASSISTANT_URL. */
 function spawnServer(url: string): ChildProcess {
@@ -72,7 +74,7 @@ async function handshake(proc: ChildProcess): Promise<void> {
   notify(proc, { jsonrpc: "2.0", method: "notifications/initialized" });
 }
 
-describe("mcp-messaging", () => {
+describe.skipIf(!distExists)("mcp-messaging", () => {
   let mockServer: http.Server;
   let mockPort: number;
   // Track requests received by the mock server
@@ -208,6 +210,25 @@ describe("mcp-messaging", () => {
       });
       const content = (res.result as { content: Array<{ text: string }> }).content;
       expect(content[0].text).toContain("channel and message are required");
+      // Should not have made an HTTP request
+      expect(lastRequest).toBeUndefined();
+    } finally {
+      proc.kill();
+    }
+  });
+
+  it("send_message returns error when channel is a non-string type", async () => {
+    const proc = spawnServer(`http://localhost:${mockPort}`);
+    try {
+      await handshake(proc);
+      const res = await rpc(proc, {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: { name: "send_message", arguments: { channel: 123, message: "hi" } },
+      });
+      const content = (res.result as { content: Array<{ text: string }> }).content;
+      expect(content[0].text).toContain("channel and message are required and must be strings");
       // Should not have made an HTTP request
       expect(lastRequest).toBeUndefined();
     } finally {

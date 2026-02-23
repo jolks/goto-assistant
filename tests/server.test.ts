@@ -587,6 +587,18 @@ describe("server", () => {
       expect(capturedTo).toBeUndefined();
     });
 
+    it("POST /api/messaging/send returns 400 when to is a non-string value", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+        to: 123,
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("to must be a string");
+    });
+
     it("POST /api/messaging/send returns 400 when send function throws", async () => {
       registerChannel("whatsapp", async () => {
         throw new Error("WhatsApp is not connected");

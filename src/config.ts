@@ -163,6 +163,8 @@ export function syncMessagingMcpServer(config?: Config): void {
     // Always resolve to dist/ — works in both dev (src/../dist/) and prod (dist/../dist/)
     const entryPoint = path.resolve(import.meta.dirname, "..", "dist", "mcp-messaging.js");
     const desired: McpServerConfig = { command: "node", args: [entryPoint], env: { GOTO_ASSISTANT_URL: url } };
+    // Key order is deterministic (both objects built programmatically).
+    // Hand-edited mcp.json with different key order causes a harmless re-write.
     if (JSON.stringify(servers[MESSAGING_SERVER_NAME]) === JSON.stringify(desired)) return;
     servers[MESSAGING_SERVER_NAME] = desired;
   } else {
