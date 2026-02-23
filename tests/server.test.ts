@@ -28,7 +28,7 @@ import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } 
 import { registerChannel, unregisterChannel, listChannels } from "../src/messaging.js";
 import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
-import { closeDb, createConversation, getConversation, saveMessage, getMessages, listConversations } from "../src/sessions.js";
+import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
 import { UPLOADS_DIR } from "../src/uploads.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles, cleanupDbFiles } from "./helpers.js";
 
@@ -773,12 +773,10 @@ describe("server", () => {
 
     it("POST /api/mcp-servers returns 400 when mcpServers is not an object", async () => {
       const app = createApp();
-      const res = await makeRequest(app, "POST", "/api/mcp-servers", true, { mcpServers: "invalid" });
-      // "invalid" is typeof string which IS an object... let's test with null
-      const res2 = await makeRequest(app, "POST", "/api/mcp-servers", true, {});
-      expect(res2.status).toBe(400);
-      const body2 = await res2.json();
-      expect(body2.error).toContain("Invalid mcpServers");
+      const res = await makeRequest(app, "POST", "/api/mcp-servers", true, {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid mcpServers");
     });
   });
 });

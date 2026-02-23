@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import { saveMcpServers } from "../src/config.js";
 import { cleanupConfigFiles } from "./helpers.js";
@@ -16,18 +16,7 @@ function fakeCronConfig(env?: Record<string, string>) {
   };
 }
 
-// Dynamic import so we get a fresh module per test — the cron module has internal state
-// (cronProc, lastCronFingerprint, nextId) that persists across calls.
-async function importCron() {
-  // Clear the module cache so each test gets fresh state
-  const modPath = path.resolve(import.meta.dirname, "..", "src", "cron.ts");
-  const modUrl = `file://${modPath}`;
-  // Vitest doesn't support invalidating modules easily, so we import the real module
-  // and manage state via stop/start.
-  return import("../src/cron.js");
-}
-
-const { isCronRunning, callCronTool, startCronServer, restartCronServer, stopCronServer } = await importCron();
+const { isCronRunning, callCronTool, startCronServer, restartCronServer, stopCronServer } = await import("../src/cron.js");
 
 describe("cron", () => {
   beforeEach(() => {
