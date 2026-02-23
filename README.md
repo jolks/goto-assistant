@@ -132,7 +132,7 @@ Schedule tasks to run periodically using natural language.
 
 **Chat & manage tasks on WhatsApp**
 
-<video src="https://github.com/user-attachments/assets/f5f63f3b-c13e-42f2-8ff0-6c10d1dc76fc" width="100%"></video>
+<video src="https://github.com/user-attachments/assets/33a6bf28-2a57-426a-8002-b022178aa0d8" width="100%"></video>
 
 Chat with the AI assistant and manage tasks from WhatsApp — the same assistant, on the go.
 
