@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * MCP stdio server for messaging.
  * Proxies send_message / list_channels tool calls to the main Express server's HTTP API.
@@ -120,7 +118,9 @@ function handleMessage(line: string): void {
   if (method === "tools/call") {
     const toolName = (params as { name: string }).name;
     const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {};
-    handleToolCall(id!, toolName, toolArgs);
+    handleToolCall(id!, toolName, toolArgs).catch((err) => {
+      send(makeResult(id!, [{ type: "text", text: `Internal error: ${(err as Error).message}` }]));
+    });
     return;
   }
 

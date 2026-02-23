@@ -7,7 +7,7 @@
   "type": "module",
   "bin": {
     "goto-assistant": "./bin/goto-assistant.js",
-    "goto-assistant-messaging": "./dist/mcp-messaging.js"
+    "goto-assistant-messaging": "./bin/goto-assistant-messaging.js"
   },
   "files": [
     "dist/",
