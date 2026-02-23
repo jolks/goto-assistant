@@ -10,6 +10,7 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
 import { DATA_DIR, loadConfig, loadMcpServers } from "./config.js";
+import { registerChannel, unregisterChannel } from "./messaging.js";
 import { routeMessage } from "./agents/router.js";
 import type { Attachment } from "./agents/router.js";
 import {
@@ -39,6 +40,20 @@ const chatQueues = new Map<string, Promise<void>>();
 // Track message IDs sent by the agent to avoid processing our own replies
 const sentMessageIds = new Set<string>();
 const MAX_SENT_IDS = 500;
+
+/** Get the normalized own JID (e.g. "60123456789@s.whatsapp.net") from the socket. */
+function getOwnJid(): string | undefined {
+  return sock?.user?.id?.replace(/:.*@/, "@");
+}
+
+/** Track a sent message ID for loop prevention. Caps the set at MAX_SENT_IDS. */
+function trackSentId(id: string): void {
+  sentMessageIds.add(id);
+  if (sentMessageIds.size > MAX_SENT_IDS) {
+    const first = sentMessageIds.values().next().value!;
+    sentMessageIds.delete(first);
+  }
+}
 
 export function getWhatsAppStatus(): ConnectionStatus {
   return connectionStatus;
@@ -92,7 +107,7 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
   if (msg.key.remoteJid === "status@broadcast") return;
 
   // Only respond in self-chat (user messaging themselves) — never reply to other people
-  const ownJid = sock?.user?.id?.replace(/:.*@/, "@");
+  const ownJid = getOwnJid();
   const isSelfChat = ownJid && msg.key.remoteJid === ownJid;
   if (!isSelfChat) return;
 
@@ -207,15 +222,7 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
         const parts = splitMessage(responseText);
         for (const part of parts) {
           const sent = await sock.sendMessage(chatId, { text: part });
-          // Track sent message ID to avoid processing our own replies in self-chat
-          if (sent?.key?.id) {
-            sentMessageIds.add(sent.key.id);
-            // Cap the set size to prevent unbounded growth
-            if (sentMessageIds.size > MAX_SENT_IDS) {
-              const first = sentMessageIds.values().next().value!;
-              sentMessageIds.delete(first);
-            }
-          }
+          if (sent?.key?.id) trackSentId(sent.key.id);
         }
       }
     } catch (err) {
@@ -264,6 +271,7 @@ export async function startWhatsApp(): Promise<void> {
       const loggedOut = statusCode === DisconnectReason.loggedOut;
       currentQr = null;
       sock = null;
+      unregisterChannel("whatsapp");
 
       if (!loggedOut && shouldReconnect) {
         connectionStatus = "connecting";
@@ -278,6 +286,7 @@ export async function startWhatsApp(): Promise<void> {
     } else if (connection === "open") {
       connectionStatus = "connected";
       currentQr = null;
+      registerChannel("whatsapp", sendWhatsAppMessage);
       console.log("WhatsApp connected successfully.");
     }
   });
@@ -300,6 +309,7 @@ export async function stopWhatsApp(): Promise<void> {
   shouldReconnect = false;
   currentQr = null;
   connectionStatus = "disconnected";
+  unregisterChannel("whatsapp");
   if (sock) {
     sock.end(undefined); // Baileys requires an explicit Error | undefined argument
     sock = null;
@@ -317,7 +327,7 @@ export async function sendWhatsAppMessage(text: string, to?: string): Promise<nu
 
   let jid: string;
   if (!to || to === "self") {
-    const ownJid = sock.user?.id?.replace(/:.*@/, "@");
+    const ownJid = getOwnJid();
     if (!ownJid) throw new Error("WhatsApp own JID not available");
     jid = ownJid;
   } else {
@@ -327,19 +337,12 @@ export async function sendWhatsAppMessage(text: string, to?: string): Promise<nu
     jid = `${digits}@s.whatsapp.net`;
   }
 
-  const isSelf = jid === sock.user?.id?.replace(/:.*@/, "@");
+  const isSelf = jid === getOwnJid();
 
   const parts = splitMessage(text);
   for (const part of parts) {
     const sent = await sock.sendMessage(jid, { text: part });
-    // Track sent message ID to avoid processing our own replies in self-chat
-    if (isSelf && sent?.key?.id) {
-      sentMessageIds.add(sent.key.id);
-      if (sentMessageIds.size > MAX_SENT_IDS) {
-        const first = sentMessageIds.values().next().value!;
-        sentMessageIds.delete(first);
-      }
-    }
+    if (isSelf && sent?.key?.id) trackSentId(sent.key.id);
   }
   return parts.length;
 }

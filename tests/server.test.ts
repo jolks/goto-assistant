@@ -18,7 +18,6 @@ vi.mock("../src/cron.js", () => ({
 vi.mock("../src/whatsapp.js", () => ({
   startWhatsApp: vi.fn().mockResolvedValue(undefined),
   stopWhatsApp: vi.fn().mockResolvedValue(undefined),
-  sendWhatsAppMessage: vi.fn().mockResolvedValue(1),
   getWhatsAppStatus: vi.fn().mockReturnValue("disconnected"),
   getWhatsAppQrDataUri: vi.fn().mockResolvedValue(null),
 }));

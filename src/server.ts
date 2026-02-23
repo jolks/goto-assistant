@@ -4,8 +4,8 @@ import http from "node:http";
 import path from "node:path";
 import multer from "multer";
 import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
-import { startWhatsApp, stopWhatsApp, sendWhatsAppMessage, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
-import { registerChannel, unregisterChannel, listChannels, sendMessage } from "./messaging.js";
+import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
+import { listChannels, sendMessage } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
@@ -16,13 +16,8 @@ import { SETUP_SYSTEM_PROMPT, TASK_SYSTEM_PROMPT, TASK_CREATE_SYSTEM_PROMPT } fr
 /** Re-read config from disk and restart mcp-cron + WhatsApp as needed. */
 function reloadServices(config?: Config): void {
   const cfg = config ?? (isConfigured() ? loadConfig() : undefined);
-  // Register/unregister messaging channels
-  if (cfg?.whatsapp?.enabled) {
-    registerChannel("whatsapp", sendWhatsAppMessage);
-  } else {
-    unregisterChannel("whatsapp");
-  }
   // Sync messaging MCP server entry in mcp.json (before cron restart so cron picks it up)
+  // Note: WhatsApp channel registration happens inside whatsapp.ts on connection open/close
   syncMessagingMcpServer(cfg);
   restartCronServer().catch((err) =>
     console.error("Failed to restart mcp-cron:", err)

@@ -2,8 +2,7 @@ import { createApp, createServer } from "./server.js";
 import { isConfigured, loadConfig, syncMessagingMcpServer } from "./config.js";
 import { runMigrations } from "./migrations.js";
 import { startCronServer, stopCronServer } from "./cron.js";
-import { startWhatsApp, stopWhatsApp, sendWhatsAppMessage } from "./whatsapp.js";
-import { registerChannel } from "./messaging.js";
+import { startWhatsApp, stopWhatsApp } from "./whatsapp.js";
 
 runMigrations();
 
@@ -18,10 +17,7 @@ server.listen(port, () => {
     console.log("First run detected — visit the URL above to configure.");
   } else {
     const config = loadConfig();
-    // Register messaging channels before starting cron (so cron tasks can use them)
-    if (config.whatsapp?.enabled) {
-      registerChannel("whatsapp", sendWhatsAppMessage);
-    }
+    // Channel registration happens inside whatsapp.ts on connection open
     syncMessagingMcpServer(config);
     startCronServer().catch((err) =>
       console.error("Failed to start mcp-cron:", err)
