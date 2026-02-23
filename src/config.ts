@@ -143,6 +143,37 @@ export function getMaskedConfig(config: Config): Config {
   };
 }
 
+export const MESSAGING_SERVER_NAME = "messaging";
+
+/**
+ * Auto-manage the messaging MCP server entry in mcp.json.
+ * Adds when any messaging channel is enabled; removes when none are.
+ * Updates GOTO_ASSISTANT_URL when the port changes.
+ */
+export function syncMessagingMcpServer(config?: Config): void {
+  const cfg = config ?? (isConfigured() ? loadConfig() : undefined);
+  if (!cfg) return;
+
+  const servers = loadMcpServers();
+  const hasMessagingChannel = cfg.whatsapp?.enabled === true;
+  const port = cfg.server.port;
+  const url = `http://localhost:${port}`;
+
+  if (hasMessagingChannel) {
+    // Always resolve to dist/ — works in both dev (src/../dist/) and prod (dist/../dist/)
+    const entryPoint = path.resolve(import.meta.dirname, "..", "dist", "mcp-messaging.js");
+    servers[MESSAGING_SERVER_NAME] = {
+      command: "node",
+      args: [entryPoint],
+      env: { GOTO_ASSISTANT_URL: url },
+    };
+  } else {
+    delete servers[MESSAGING_SERVER_NAME];
+  }
+
+  saveMcpServers(servers);
+}
+
 export function getMaskedMcpServers(
   servers: Record<string, McpServerConfig>
 ): Record<string, McpServerConfig> {

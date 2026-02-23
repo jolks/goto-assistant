@@ -3,8 +3,9 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
-import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
+import { startWhatsApp, stopWhatsApp, sendWhatsAppMessage, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
+import { registerChannel, unregisterChannel, listChannels, sendMessage } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
@@ -15,6 +16,14 @@ import { SETUP_SYSTEM_PROMPT, TASK_SYSTEM_PROMPT, TASK_CREATE_SYSTEM_PROMPT } fr
 /** Re-read config from disk and restart mcp-cron + WhatsApp as needed. */
 function reloadServices(config?: Config): void {
   const cfg = config ?? (isConfigured() ? loadConfig() : undefined);
+  // Register/unregister messaging channels
+  if (cfg?.whatsapp?.enabled) {
+    registerChannel("whatsapp", sendWhatsAppMessage);
+  } else {
+    unregisterChannel("whatsapp");
+  }
+  // Sync messaging MCP server entry in mcp.json (before cron restart so cron picks it up)
+  syncMessagingMcpServer(cfg);
   restartCronServer().catch((err) =>
     console.error("Failed to restart mcp-cron:", err)
   );
@@ -250,6 +259,31 @@ export function createApp(): Express {
     id: req.params.id,
     limit: parseInt(req.query.limit as string) || 1,
   }));
+
+  // --- Messaging endpoints ---
+
+  app.get("/api/messaging/channels", (_req, res) => {
+    res.json({ channels: listChannels() });
+  });
+
+  app.post("/api/messaging/send", async (req, res) => {
+    const { channel, message, to } = req.body;
+    if (!channel || typeof channel !== "string") {
+      res.status(400).json({ error: "channel is required" });
+      return;
+    }
+    if (!message || typeof message !== "string") {
+      res.status(400).json({ error: "message is required" });
+      return;
+    }
+    try {
+      const partsSent = await sendMessage(channel, message, to);
+      res.json({ ok: true, channel, partsSent });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      res.status(400).json({ error: msg, channels: listChannels() });
+    }
+  });
 
   // --- Reload services (re-read config from disk, restart cron + WhatsApp) ---
 

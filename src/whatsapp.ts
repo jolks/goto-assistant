@@ -306,5 +306,43 @@ export async function stopWhatsApp(): Promise<void> {
   }
 }
 
+/**
+ * Send a text message via WhatsApp.
+ * @param text - Message content to send
+ * @param to - Phone number (e.g. "+60123456789") or "self"/undefined for self-chat
+ * @returns Number of message parts sent
+ */
+export async function sendWhatsAppMessage(text: string, to?: string): Promise<number> {
+  if (!sock) throw new Error("WhatsApp is not connected");
+
+  let jid: string;
+  if (!to || to === "self") {
+    const ownJid = sock.user?.id?.replace(/:.*@/, "@");
+    if (!ownJid) throw new Error("WhatsApp own JID not available");
+    jid = ownJid;
+  } else {
+    // Normalize phone number to JID: strip + and non-digits, append @s.whatsapp.net
+    const digits = to.replace(/\D/g, "");
+    if (!digits) throw new Error("Invalid phone number");
+    jid = `${digits}@s.whatsapp.net`;
+  }
+
+  const isSelf = jid === sock.user?.id?.replace(/:.*@/, "@");
+
+  const parts = splitMessage(text);
+  for (const part of parts) {
+    const sent = await sock.sendMessage(jid, { text: part });
+    // Track sent message ID to avoid processing our own replies in self-chat
+    if (isSelf && sent?.key?.id) {
+      sentMessageIds.add(sent.key.id);
+      if (sentMessageIds.size > MAX_SENT_IDS) {
+        const first = sentMessageIds.values().next().value!;
+        sentMessageIds.delete(first);
+      }
+    }
+  }
+  return parts.length;
+}
+
 // Exported for testing
 export { enqueueChat as _enqueueChat, chatQueues as _chatQueues };

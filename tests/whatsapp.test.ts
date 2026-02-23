@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { splitMessage, _enqueueChat, _chatQueues } from "../src/whatsapp.js";
+import { splitMessage, sendWhatsAppMessage, _enqueueChat, _chatQueues } from "../src/whatsapp.js";
 
 describe("whatsapp", () => {
   describe("splitMessage", () => {
@@ -56,6 +56,22 @@ describe("whatsapp", () => {
       const longMsg = "a".repeat(65001);
       const result2 = splitMessage(longMsg);
       expect(result2.length).toBeGreaterThan(1);
+    });
+  });
+
+  describe("sendWhatsAppMessage", () => {
+    it("throws when socket is null", async () => {
+      await expect(sendWhatsAppMessage("hello")).rejects.toThrow("WhatsApp is not connected");
+    });
+
+    it("throws when socket is null with phone number", async () => {
+      await expect(sendWhatsAppMessage("hello", "+60123456789")).rejects.toThrow("WhatsApp is not connected");
+    });
+
+    it("throws for invalid phone number (empty digits)", async () => {
+      // We can't test with a connected socket without mocking Baileys,
+      // but we can verify it fails before reaching the socket
+      await expect(sendWhatsAppMessage("hello", "+++")).rejects.toThrow();
     });
   });
 

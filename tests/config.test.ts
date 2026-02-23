@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
+import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, MESSAGING_SERVER_NAME, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
 
 describe("config", () => {
@@ -224,6 +224,75 @@ describe("config", () => {
     };
     const result = unmaskMcpServers(incoming, existing, config);
     expect(result.cron.env!.MCP_CRON_AI_API_KEY).toBe("sk-ant-test123456");
+  });
+
+  describe("syncMessagingMcpServer", () => {
+    it("adds messaging entry when WhatsApp is enabled", () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      syncMessagingMcpServer();
+      const servers = loadMcpServers();
+      expect(servers[MESSAGING_SERVER_NAME]).toBeDefined();
+      expect(servers[MESSAGING_SERVER_NAME].command).toBe("node");
+      expect(servers[MESSAGING_SERVER_NAME].env?.GOTO_ASSISTANT_URL).toBe("http://localhost:3000");
+    });
+
+    it("entry point path exists on disk", () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      syncMessagingMcpServer();
+      const servers = loadMcpServers();
+      const entryPoint = servers[MESSAGING_SERVER_NAME].args[0];
+      expect(fs.existsSync(entryPoint)).toBe(true);
+    });
+
+    it("removes messaging entry when WhatsApp is disabled", () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      syncMessagingMcpServer();
+      expect(loadMcpServers()[MESSAGING_SERVER_NAME]).toBeDefined();
+
+      saveConfig({ ...testConfig, whatsapp: { enabled: false } });
+      syncMessagingMcpServer();
+      expect(loadMcpServers()[MESSAGING_SERVER_NAME]).toBeUndefined();
+    });
+
+    it("removes messaging entry when whatsapp config is missing", () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      syncMessagingMcpServer();
+      expect(loadMcpServers()[MESSAGING_SERVER_NAME]).toBeDefined();
+
+      saveConfig(testConfig); // testConfig has no whatsapp field
+      syncMessagingMcpServer();
+      expect(loadMcpServers()[MESSAGING_SERVER_NAME]).toBeUndefined();
+    });
+
+    it("updates GOTO_ASSISTANT_URL when port changes", () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true }, server: { port: 4000 } });
+      syncMessagingMcpServer();
+      const servers = loadMcpServers();
+      expect(servers[MESSAGING_SERVER_NAME].env?.GOTO_ASSISTANT_URL).toBe("http://localhost:4000");
+    });
+
+    it("preserves other MCP servers", () => {
+      saveMcpServers({ memory: { command: "npx", args: ["-y", "server-memory"] } });
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      syncMessagingMcpServer();
+      const servers = loadMcpServers();
+      expect(servers.memory).toBeDefined();
+      expect(servers[MESSAGING_SERVER_NAME]).toBeDefined();
+    });
+
+    it("accepts config parameter instead of reading from disk", () => {
+      const cfg = { ...testConfig, whatsapp: { enabled: true } as const, server: { port: 5000 } };
+      saveConfig(cfg); // needed so isConfigured() is true if fallback used, but we pass config directly
+      syncMessagingMcpServer(cfg);
+      const servers = loadMcpServers();
+      expect(servers[MESSAGING_SERVER_NAME].env?.GOTO_ASSISTANT_URL).toBe("http://localhost:5000");
+    });
+
+    it("no-ops when not configured and no config passed", () => {
+      // No config file on disk, no config passed
+      syncMessagingMcpServer();
+      expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(false);
+    });
   });
 
   it("unmaskMcpServers prefers existing server value over config for same key", () => {

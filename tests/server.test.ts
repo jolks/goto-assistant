@@ -15,9 +15,17 @@ vi.mock("../src/cron.js", () => ({
   isCronRunning: vi.fn().mockReturnValue(false),
   callCronTool: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("../src/whatsapp.js", () => ({
+  startWhatsApp: vi.fn().mockResolvedValue(undefined),
+  stopWhatsApp: vi.fn().mockResolvedValue(undefined),
+  sendWhatsAppMessage: vi.fn().mockResolvedValue(1),
+  getWhatsAppStatus: vi.fn().mockReturnValue("disconnected"),
+  getWhatsAppQrDataUri: vi.fn().mockResolvedValue(null),
+}));
 
 import { createApp } from "../src/server.js";
 import { stopCronServer, isCronRunning, callCronTool } from "../src/cron.js";
+import { registerChannel, unregisterChannel, listChannels } from "../src/messaging.js";
 import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
@@ -35,6 +43,10 @@ describe("server", () => {
     cleanupConfigFiles();
     cleanupDbFiles();
     if (fs.existsSync(UPLOADS_DIR)) fs.rmSync(UPLOADS_DIR, { recursive: true });
+    // Clean up messaging channels
+    for (const name of listChannels()) {
+      unregisterChannel(name);
+    }
   });
 
   it("GET /health returns 200", async () => {
@@ -487,6 +499,106 @@ describe("server", () => {
       const res = await makeRequest(app, "GET", "/api/tasks/t1/results?limit=5");
       expect(res.status).toBe(200);
       expect(callCronTool).toHaveBeenCalledWith("get_task_result", { id: "t1", limit: 5 });
+    });
+  });
+
+  describe("messaging API endpoints", () => {
+    beforeEach(() => {
+      saveConfig(testConfig);
+    });
+
+    it("GET /api/messaging/channels returns empty when no channels registered", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/messaging/channels");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.channels).toEqual([]);
+    });
+
+    it("GET /api/messaging/channels returns registered channels", async () => {
+      registerChannel("whatsapp", async () => 1);
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/messaging/channels");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.channels).toEqual(["whatsapp"]);
+    });
+
+    it("POST /api/messaging/send returns 400 when channel is missing", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, { message: "hi" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("channel is required");
+    });
+
+    it("POST /api/messaging/send returns 400 when message is missing", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, { channel: "whatsapp" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("message is required");
+    });
+
+    it("POST /api/messaging/send returns 400 for unknown channel", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "telegram",
+        message: "hi",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('Unknown channel: "telegram"');
+      expect(body.channels).toEqual([]);
+    });
+
+    it("POST /api/messaging/send succeeds for registered channel", async () => {
+      let captured: { message: string; to?: string } | undefined;
+      registerChannel("whatsapp", async (message, to) => {
+        captured = { message, to };
+        return 2;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello world",
+        to: "+60123456789",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.channel).toBe("whatsapp");
+      expect(body.partsSent).toBe(2);
+      expect(captured).toEqual({ message: "hello world", to: "+60123456789" });
+    });
+
+    it("POST /api/messaging/send defaults to self when to is omitted", async () => {
+      let capturedTo: string | undefined;
+      registerChannel("whatsapp", async (_message, to) => {
+        capturedTo = to;
+        return 1;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+      });
+      expect(res.status).toBe(200);
+      expect(capturedTo).toBeUndefined();
+    });
+
+    it("POST /api/messaging/send returns 400 when send function throws", async () => {
+      registerChannel("whatsapp", async () => {
+        throw new Error("WhatsApp is not connected");
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("WhatsApp is not connected");
     });
   });
 });

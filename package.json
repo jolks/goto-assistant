@@ -6,7 +6,8 @@
   "packageManager": "pnpm@10.29.3",
   "type": "module",
   "bin": {
-    "goto-assistant": "./bin/goto-assistant.js"
+    "goto-assistant": "./bin/goto-assistant.js",
+    "goto-assistant-messaging": "./dist/mcp-messaging.js"
   },
   "files": [
     "dist/",
