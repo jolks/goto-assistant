@@ -19,7 +19,7 @@ export function listChannels(): string[] {
 }
 
 export async function sendMessage(channel: string, message: string, to?: string): Promise<number> {
-  const send = channels.get(channel);
+  const send = getChannel(channel);
   if (!send) {
     throw new Error(`Unknown channel: "${channel}". Available channels: ${listChannels().join(", ") || "none"}`);
   }

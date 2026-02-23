@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, MESSAGING_SERVER_NAME, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
@@ -286,6 +286,25 @@ describe("config", () => {
       syncMessagingMcpServer(cfg);
       const servers = loadMcpServers();
       expect(servers[MESSAGING_SERVER_NAME].env?.GOTO_ASSISTANT_URL).toBe("http://localhost:5000");
+    });
+
+    it("skips saveMcpServers when entry is already up-to-date", () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      syncMessagingMcpServer(); // first call writes
+      const spy = vi.spyOn(fs, "writeFileSync");
+      syncMessagingMcpServer(); // second call should skip
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it("skips saveMcpServers when removing already-absent entry", () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: false } });
+      // Ensure no messaging entry exists
+      saveMcpServers({});
+      const spy = vi.spyOn(fs, "writeFileSync");
+      syncMessagingMcpServer();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
     });
 
     it("no-ops when not configured and no config passed", () => {

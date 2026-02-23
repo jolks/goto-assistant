@@ -253,6 +253,21 @@ describe("mcp-messaging", () => {
     }
   });
 
+  it("returns -32600 error when method is missing", async () => {
+    const proc = spawnServer(`http://localhost:${mockPort}`);
+    try {
+      const res = await rpc(proc, {
+        jsonrpc: "2.0",
+        id: 42,
+      });
+      expect(res.error).toBeDefined();
+      expect((res.error as { code: number }).code).toBe(-32600);
+      expect((res.error as { message: string }).message).toContain("missing method");
+    } finally {
+      proc.kill();
+    }
+  });
+
   it("unknown method returns JSON-RPC error", async () => {
     const proc = spawnServer(`http://localhost:${mockPort}`);
     try {

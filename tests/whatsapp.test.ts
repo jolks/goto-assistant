@@ -68,10 +68,17 @@ describe("whatsapp", () => {
       await expect(sendWhatsAppMessage("hello", "+60123456789")).rejects.toThrow("WhatsApp is not connected");
     });
 
-    it("throws for invalid phone number (empty digits)", async () => {
-      // We can't test with a connected socket without mocking Baileys,
-      // but we can verify it fails before reaching the socket
-      await expect(sendWhatsAppMessage("hello", "+++")).rejects.toThrow();
+    it("throws for invalid phone number (no digits)", async () => {
+      await expect(sendWhatsAppMessage("hello", "+++")).rejects.toThrow("Invalid phone number");
+    });
+
+    it("throws for too-short phone number", async () => {
+      await expect(sendWhatsAppMessage("hello", "12345")).rejects.toThrow("Invalid phone number");
+      await expect(sendWhatsAppMessage("hello", "1")).rejects.toThrow("Invalid phone number");
+    });
+
+    it("throws 'not connected' for self (no phone validation needed)", async () => {
+      await expect(sendWhatsAppMessage("hello", "self")).rejects.toThrow("WhatsApp is not connected");
     });
   });
 

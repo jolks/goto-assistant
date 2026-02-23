@@ -162,12 +162,11 @@ export function syncMessagingMcpServer(config?: Config): void {
   if (hasMessagingChannel) {
     // Always resolve to dist/ — works in both dev (src/../dist/) and prod (dist/../dist/)
     const entryPoint = path.resolve(import.meta.dirname, "..", "dist", "mcp-messaging.js");
-    servers[MESSAGING_SERVER_NAME] = {
-      command: "node",
-      args: [entryPoint],
-      env: { GOTO_ASSISTANT_URL: url },
-    };
+    const desired: McpServerConfig = { command: "node", args: [entryPoint], env: { GOTO_ASSISTANT_URL: url } };
+    if (JSON.stringify(servers[MESSAGING_SERVER_NAME]) === JSON.stringify(desired)) return;
+    servers[MESSAGING_SERVER_NAME] = desired;
   } else {
+    if (!(MESSAGING_SERVER_NAME in servers)) return;
     delete servers[MESSAGING_SERVER_NAME];
   }
 

@@ -323,18 +323,20 @@ export async function stopWhatsApp(): Promise<void> {
  * @returns Number of message parts sent
  */
 export async function sendWhatsAppMessage(text: string, to?: string): Promise<number> {
+  // Validate phone number before checking socket so it can be tested without a connection
+  let jid: string | undefined;
+  if (to && to !== "self") {
+    const digits = to.replace(/\D/g, "");
+    if (digits.length < 7) throw new Error("Invalid phone number");
+    jid = `${digits}@s.whatsapp.net`;
+  }
+
   if (!sock) throw new Error("WhatsApp is not connected");
 
-  let jid: string;
-  if (!to || to === "self") {
+  if (!jid) {
     const ownJid = getOwnJid();
     if (!ownJid) throw new Error("WhatsApp own JID not available");
     jid = ownJid;
-  } else {
-    // Normalize phone number to JID: strip + and non-digits, append @s.whatsapp.net
-    const digits = to.replace(/\D/g, "");
-    if (!digits) throw new Error("Invalid phone number");
-    jid = `${digits}@s.whatsapp.net`;
   }
 
   const isSelf = jid === getOwnJid();

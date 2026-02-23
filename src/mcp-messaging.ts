@@ -7,7 +7,7 @@ import readline from "node:readline";
 
 const BASE_URL = process.env.GOTO_ASSISTANT_URL || "http://localhost:3000";
 
-function send(msg: Record<string, unknown>): void {
+function respond(msg: Record<string, unknown>): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
@@ -45,13 +45,13 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
     try {
       const res = await fetch(`${BASE_URL}/api/messaging/channels`);
       if (!res.ok) {
-        send(makeResult(id, [{ type: "text", text: `Error: HTTP ${res.status} from server` }]));
+        respond(makeResult(id, [{ type: "text", text: `Error: HTTP ${res.status} from server` }]));
         return;
       }
       const data = await res.json() as { channels: string[] };
-      send(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
+      respond(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
     } catch (err) {
-      send(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }]));
+      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }]));
     }
     return;
   }
@@ -59,7 +59,7 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
   if (name === "send_message") {
     const { channel, message, to } = args as { channel: string; message: string; to?: string };
     if (!channel || !message) {
-      send(makeResult(id, [{ type: "text", text: "Error: channel and message are required" }]));
+      respond(makeResult(id, [{ type: "text", text: "Error: channel and message are required" }]));
       return;
     }
     try {
@@ -70,31 +70,40 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
       });
       const data = await res.json() as Record<string, unknown>;
       if (!res.ok) {
-        send(makeResult(id, [{ type: "text", text: `Error: ${(data as { error?: string }).error || `HTTP ${res.status}`}` }]));
+        respond(makeResult(id, [{ type: "text", text: `Error: ${(data as { error?: string }).error || `HTTP ${res.status}`}` }]));
         return;
       }
-      send(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
+      respond(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
     } catch (err) {
-      send(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }]));
+      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }]));
     }
     return;
   }
 
-  send(makeError(id, -32601, `Unknown tool: ${name}`));
+  respond(makeError(id, -32601, `Unknown tool: ${name}`));
 }
 
 function handleMessage(line: string): void {
-  let msg: { jsonrpc: string; id?: number | string; method: string; params?: Record<string, unknown> };
+  let msg: Record<string, unknown>;
   try {
     msg = JSON.parse(line);
   } catch {
     return;
   }
 
-  const { id, method, params } = msg;
+  const id = msg.id as number | string | undefined;
+  const method = msg.method;
+  const params = msg.params as Record<string, unknown> | undefined;
+
+  if (typeof method !== "string") {
+    if (id !== undefined) {
+      respond(makeError(id, -32600, "Invalid request: missing method"));
+    }
+    return;
+  }
 
   if (method === "initialize") {
-    send({
+    respond({
       jsonrpc: "2.0",
       id,
       result: {
@@ -111,22 +120,23 @@ function handleMessage(line: string): void {
   }
 
   if (method === "tools/list") {
-    send({ jsonrpc: "2.0", id, result: { tools: TOOLS } });
+    respond({ jsonrpc: "2.0", id, result: { tools: TOOLS } });
     return;
   }
 
   if (method === "tools/call") {
     const toolName = (params as { name: string }).name;
     const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {};
+    // .catch: tool errors are returned as content text per MCP spec, not as JSON-RPC errors
     handleToolCall(id!, toolName, toolArgs).catch((err) => {
-      send(makeResult(id!, [{ type: "text", text: `Internal error: ${(err as Error).message}` }]));
+      respond(makeResult(id!, [{ type: "text", text: `Internal error: ${(err as Error).message}` }]));
     });
     return;
   }
 
   // Unknown method
   if (id !== undefined) {
-    send(makeError(id, -32601, `Method not found: ${method}`));
+    respond(makeError(id, -32601, `Method not found: ${method}`));
   }
 }
 
