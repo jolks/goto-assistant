@@ -29,7 +29,7 @@ const TOOLS = [
         channel: { type: "string", description: 'Messaging channel (e.g. "whatsapp")' },
         message: { type: "string", description: "Text message to send (becomes caption when media is provided)" },
         to: { type: "string", description: 'Recipient — phone number (e.g. "+60123456789") or "self" (default: self)' },
-        media: { type: "string", description: "Local file path or URL to a media file to send (image, video, audio, document). When provided, 'message' becomes the caption." },
+        media: { type: "string", description: "Local file path, URL, or upload reference (upload:{fileId}) to a media file to send (image, video, audio, document). When provided, 'message' becomes the caption. Use upload:{fileId} to reference files previously shared in the conversation." },
       },
       required: ["channel"],
     },

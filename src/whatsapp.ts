@@ -397,7 +397,12 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
     let content: Record<string, any>;
     switch (mediaType) {
       case "image":
-        content = { image: source, caption };
+        if (mimeType === "image/gif") {
+          // WhatsApp requires GIFs to be sent as video with gifPlayback flag
+          content = { video: source, caption, gifPlayback: true };
+        } else {
+          content = { image: source, caption };
+        }
         break;
       case "video":
         content = { video: source, caption };

@@ -284,7 +284,18 @@ export function createApp(): Express {
       return;
     }
     try {
-      const options = media ? { media } : undefined;
+      // Resolve upload:{fileId} references to actual file paths
+      let resolvedMedia = media;
+      if (media && typeof media === "string" && media.startsWith("upload:")) {
+        const fileId = media.slice("upload:".length);
+        const upload = getUpload(fileId);
+        if (!upload) {
+          res.status(400).json({ error: `Upload not found: ${fileId}` });
+          return;
+        }
+        resolvedMedia = path.resolve(UPLOADS_DIR, fileId, upload.filename);
+      }
+      const options = resolvedMedia ? { media: resolvedMedia } : undefined;
       const partsSent = await sendMessage(channel, message ?? "", to, options);
       res.json({ ok: true, channel, partsSent });
     } catch (err) {

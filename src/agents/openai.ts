@@ -110,6 +110,7 @@ export async function runOpenAI(
         } else if (parsed.attachments && parsed.attachments.length > 0) {
           // Re-read image data for user messages that had attachments
           const content: Array<Record<string, unknown>> = [];
+          const refs: string[] = [];
           for (const att of parsed.attachments) {
             const upload = getUpload(att.fileId);
             if (upload) {
@@ -117,9 +118,12 @@ export async function runOpenAI(
                 type: "input_image",
                 image: `data:${upload.mimeType};base64,${upload.data.toString("base64")}`,
               });
+              refs.push(`[Attached file: upload:${att.fileId} (${att.filename}, ${upload.mimeType})]`);
             }
           }
-          content.push({ type: "input_text", text: parsed.text });
+          // Include upload references so the model can use send_message media with upload:{fileId}
+          const text = refs.length > 0 ? `${refs.join("\n")}\n${parsed.text}` : parsed.text;
+          content.push({ type: "input_text", text });
           inputMessages.push({ role: "user", content });
         } else {
           inputMessages.push({ role: msg.role, content: parsed.text });
@@ -136,7 +140,17 @@ export async function runOpenAI(
           image: `data:${att.mimeType};base64,${att.data.toString("base64")}`,
         });
       }
-      content.push({ type: "input_text", text: prompt });
+      // Include upload references so the model can use send_message media with upload:{fileId}
+      // Current message attachments have filePath but we need to extract fileId from it
+      const refs = attachments
+        .filter(a => a.filePath)
+        .map(a => {
+          const parts = a.filePath!.split("/");
+          const fileId = parts[parts.length - 2]; // .../uploads/{fileId}/{filename}
+          return `[Attached file: upload:${fileId} (${a.filename}, ${a.mimeType})]`;
+        });
+      const text = refs.length > 0 ? `${refs.join("\n")}\n${prompt}` : prompt;
+      content.push({ type: "input_text", text });
       inputMessages.push({ role: "user", content });
     } else {
       inputMessages.push({ role: "user", content: prompt });

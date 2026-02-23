@@ -657,6 +657,43 @@ describe("server", () => {
       const body = await res.json();
       expect(body.error).toContain("media must be a string");
     });
+
+    it("POST /api/messaging/send resolves upload:{fileId} to actual file path", async () => {
+      // Upload a file first
+      const app = createApp();
+      const uploadRes = await makeUploadRequest(app, "photo.png", "image/png", Buffer.from("fake-png"));
+      const { fileId } = await uploadRes.json();
+
+      let capturedOptions: { media?: string } | undefined;
+      registerChannel("whatsapp", async (_message, _to, options) => {
+        capturedOptions = options;
+        return 1;
+      });
+
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "check this",
+        media: `upload:${fileId}`,
+      });
+      expect(res.status).toBe(200);
+      // The resolved path should point to the actual file, not the upload: reference
+      expect(capturedOptions?.media).toContain(fileId);
+      expect(capturedOptions?.media).toContain("photo.png");
+      expect(capturedOptions?.media).not.toContain("upload:");
+    });
+
+    it("POST /api/messaging/send returns 400 for unknown upload:{fileId}", async () => {
+      const app = createApp();
+      registerChannel("whatsapp", async () => 1);
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "check this",
+        media: "upload:nonexistent-id",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Upload not found");
+    });
   });
 
   describe("POST /api/models", () => {

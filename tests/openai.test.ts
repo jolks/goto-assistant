@@ -131,10 +131,28 @@ describe("openai input construction", () => {
     expect(content).toHaveLength(2);
     expect(content[0].type).toBe("input_image");
     expect((content[0].image as string).startsWith("data:image/png;base64,")).toBe(true);
-    expect(content[1]).toEqual({ type: "input_text", text: "look at this" });
+    // Text should include the upload reference for the model to use with send_message
+    expect((content[1] as { type: string; text: string }).text).toContain("upload:abc");
+    expect((content[1] as { type: string; text: string }).text).toContain("look at this");
 
     expect(messages[1]).toEqual({ role: "assistant", content: [{ type: "output_text", text: "I see an image" }] });
     expect(messages[2]).toEqual({ role: "user", content: "and this?" });
+  });
+
+  it("includes upload reference in current message when attachments have filePath", async () => {
+    const attachments: Attachment[] = [{
+      filename: "photo.png",
+      mimeType: "image/png",
+      data: Buffer.from("fake-image"),
+      filePath: "/data/uploads/file123/photo.png",
+    }];
+    await runOpenAI("send this on whatsapp", config, mcpServers, vi.fn(), { attachments });
+
+    const messages = capturedInput as Array<Record<string, unknown>>;
+    const content = messages[0].content as Array<Record<string, unknown>>;
+    const textBlock = content.find(c => c.type === "input_text") as { text: string };
+    expect(textBlock.text).toContain("upload:file123");
+    expect(textBlock.text).toContain("send this on whatsapp");
   });
 });
 
