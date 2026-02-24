@@ -288,6 +288,10 @@ export function createApp(): Express {
       let resolvedMedia = media;
       if (media && typeof media === "string" && media.startsWith("upload:")) {
         const fileId = media.slice("upload:".length);
+        if (!/^[a-f0-9-]+$/i.test(fileId)) {
+          res.status(400).json({ error: "Invalid file ID" });
+          return;
+        }
         const upload = getUpload(fileId);
         if (!upload) {
           res.status(400).json({ error: `Upload not found: ${fileId}` });

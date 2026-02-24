@@ -140,21 +140,22 @@ export async function runOpenAI(
     // Add current message
     if (attachments && attachments.length > 0) {
       const content: Array<Record<string, unknown>> = [];
+      const refs: string[] = [];
       for (const att of attachments) {
-        content.push({
-          type: "input_image",
-          image: `data:${att.mimeType};base64,${att.data.toString("base64")}`,
-        });
-      }
-      // Include upload references so the model can use send_message media with upload:{fileId}
-      // Current message attachments have filePath but we need to extract fileId from it
-      const refs = attachments
-        .filter(a => a.filePath)
-        .map(a => {
-          const parts = a.filePath!.split("/");
+        // Build upload reference for the model to use with send_message media
+        if (att.filePath) {
+          const parts = att.filePath.split("/");
           const fileId = parts[parts.length - 2]; // .../uploads/{fileId}/{filename}
-          return `[Attached file: upload:${fileId} (${a.filename}, ${a.mimeType})]`;
-        });
+          refs.push(`[Attached file: upload:${fileId} (${att.filename}, ${att.mimeType})]`);
+        }
+        // Only include image types as input_image blocks; skip non-image attachments
+        if (ALLOWED_IMAGE_TYPES.includes(att.mimeType)) {
+          content.push({
+            type: "input_image",
+            image: `data:${att.mimeType};base64,${att.data.toString("base64")}`,
+          });
+        }
+      }
       const text = refs.length > 0 ? `${refs.join("\n")}\n${prompt}` : prompt;
       content.push({ type: "input_text", text });
       inputMessages.push({ role: "user", content });

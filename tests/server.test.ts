@@ -682,13 +682,26 @@ describe("server", () => {
       expect(capturedOptions?.media).not.toContain("upload:");
     });
 
+    it("POST /api/messaging/send returns 400 for path traversal in upload fileId", async () => {
+      const app = createApp();
+      registerChannel("whatsapp", async () => 1);
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "check this",
+        media: "upload:../../etc/passwd",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid file ID");
+    });
+
     it("POST /api/messaging/send returns 400 for unknown upload:{fileId}", async () => {
       const app = createApp();
       registerChannel("whatsapp", async () => 1);
       const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
         channel: "whatsapp",
         message: "check this",
-        media: "upload:nonexistent-id",
+        media: "upload:a0b1c2d3-e4f5-6789-abcd-ef0123456789",
       });
       expect(res.status).toBe(400);
       const body = await res.json();

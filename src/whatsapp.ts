@@ -270,7 +270,12 @@ export async function startWhatsApp(): Promise<void> {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   // Fetch the latest WA web version to avoid 405 protocol mismatch errors
-  const { version } = await fetchLatestWaWebVersion();
+  let version: [number, number, number] | undefined;
+  try {
+    ({ version } = await fetchLatestWaWebVersion());
+  } catch {
+    console.warn("Could not fetch latest WA web version, using Baileys default");
+  }
 
   sock = makeWASocket({
     auth: {
@@ -278,7 +283,7 @@ export async function startWhatsApp(): Promise<void> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Baileys expects a pino logger; pass undefined to suppress logs
       keys: makeCacheableSignalKeyStore(state.keys, undefined as any),
     },
-    version,
+    ...(version ? { version } : {}),
     printQRInTerminal: false,
   });
 
@@ -442,6 +447,8 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
       case "document":
         content = { document: source, mimetype: mimeType, fileName: path.basename(media), caption };
         break;
+      default:
+        throw new Error(`Unknown media type: ${mediaType}`);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- content is built dynamically from a known-safe switch

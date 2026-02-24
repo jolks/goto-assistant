@@ -139,6 +139,37 @@ describe("openai input construction", () => {
     expect(messages[2]).toEqual({ role: "user", content: "and this?" });
   });
 
+  it("skips non-image attachments as input_image blocks in current message", async () => {
+    const attachments: Attachment[] = [
+      {
+        filename: "photo.png",
+        mimeType: "image/png",
+        data: Buffer.from("fake-image"),
+        filePath: "/data/uploads/img123/photo.png",
+      },
+      {
+        filename: "doc.pdf",
+        mimeType: "application/pdf",
+        data: Buffer.from("fake-pdf"),
+        filePath: "/data/uploads/pdf456/doc.pdf",
+      },
+    ];
+    await runOpenAI("check these files", config, mcpServers, vi.fn(), { attachments });
+
+    const messages = capturedInput as Array<Record<string, unknown>>;
+    const content = messages[0].content as Array<Record<string, unknown>>;
+    // Should have 1 input_image (for PNG) + 1 input_text (with refs for both)
+    const imageBlocks = content.filter(c => c.type === "input_image");
+    expect(imageBlocks).toHaveLength(1);
+    expect((imageBlocks[0].image as string).startsWith("data:image/png;base64,")).toBe(true);
+
+    const textBlock = content.find(c => c.type === "input_text") as { text: string };
+    expect(textBlock.text).toContain("upload:img123");
+    expect(textBlock.text).toContain("upload:pdf456");
+    expect(textBlock.text).toContain("application/pdf");
+    expect(textBlock.text).toContain("check these files");
+  });
+
   it("includes upload reference in current message when attachments have filePath", async () => {
     const attachments: Attachment[] = [{
       filename: "photo.png",
