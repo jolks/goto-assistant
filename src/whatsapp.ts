@@ -380,6 +380,10 @@ export function lookupMimeType(source: string): string {
 
 /** Classify a MIME type into a WhatsApp media category. */
 export function classifyMediaType(mimeType: string): "image" | "video" | "audio" | "document" {
+  // GIFs: Baileys' image pipeline runs sharp extractImageThumb which corrupts
+  // animated GIFs (multi-frame → broken upload). Send as document to preserve
+  // the original file. Proper animated GIF would require ffmpeg → mp4 + gifPlayback.
+  if (mimeType === "image/gif") return "document";
   if (mimeType.startsWith("image/")) return "image";
   if (mimeType.startsWith("video/")) return "video";
   if (mimeType.startsWith("audio/")) return "audio";

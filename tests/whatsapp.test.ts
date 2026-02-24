@@ -108,6 +108,10 @@ describe("whatsapp", () => {
       expect(classifyMediaType("audio/ogg")).toBe("audio");
     });
 
+    it("classifies GIFs as document to avoid Baileys sharp corruption", () => {
+      expect(classifyMediaType("image/gif")).toBe("document");
+    });
+
     it("classifies everything else as document", () => {
       expect(classifyMediaType("application/pdf")).toBe("document");
       expect(classifyMediaType("application/zip")).toBe("document");
