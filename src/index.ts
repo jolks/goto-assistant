@@ -1,7 +1,7 @@
 import { createApp, createServer } from "./server.js";
 import { isConfigured, loadConfig, syncMessagingMcpServer } from "./config.js";
 import { runMigrations } from "./migrations.js";
-import { startCronServer, stopCronServer } from "./cron.js";
+import { startCronServer, stopCronServer, stopCronSync } from "./cron.js";
 import { startWhatsApp, stopWhatsApp } from "./whatsapp.js";
 
 runMigrations();
@@ -39,3 +39,4 @@ function shutdown() {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+process.on("exit", () => { stopCronSync(); });

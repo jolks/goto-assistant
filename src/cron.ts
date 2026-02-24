@@ -163,5 +163,21 @@ export async function stopCronServer(): Promise<void> {
   const proc = cronProc;
   cronProc = null;
   lastCronFingerprint = null;
+
+  // Wait for process to actually exit after sending SIGTERM.
+  // The broken stdin pipe causes mcp-cron to exit on EOF.
+  const exited = new Promise<void>((resolve) => {
+    proc.on("exit", () => resolve());
+    setTimeout(resolve, 5000); // fallback: don't block shutdown forever
+  });
+  killProc(proc);
+  await exited;
+}
+
+/** Synchronous stop for use in process.on("exit") handler. */
+export function stopCronSync(): void {
+  if (!cronProc) return;
+  const proc = cronProc;
+  cronProc = null;
   killProc(proc);
 }
