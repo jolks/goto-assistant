@@ -30,6 +30,8 @@ export function saveUpload(
   fs.mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, path.basename(filename));
   fs.writeFileSync(filePath, buffer);
+  // Persist MIME type so getUpload() can return it accurately
+  fs.writeFileSync(path.join(dir, ".mimetype"), mimeType);
   return { fileId, filename, mimeType, size: buffer.length, path: filePath };
 }
 
@@ -42,17 +44,26 @@ export function getUpload(
   const files = fs.readdirSync(dir);
   if (files.length === 0) return null;
 
-  const filename = files[0];
+  const filename = files.find((f) => f !== ".mimetype")!;
+  if (!filename) return null;
   const filePath = path.join(dir, filename);
   const data = fs.readFileSync(filePath);
-  const ext = path.extname(filename).toLowerCase();
-  const mimeMap: Record<string, string> = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-  };
-  const mimeType = mimeMap[ext] || "application/octet-stream";
+
+  // Read persisted MIME type, fall back to extension-based detection
+  const mimeTypeFile = path.join(dir, ".mimetype");
+  let mimeType: string;
+  if (fs.existsSync(mimeTypeFile)) {
+    mimeType = fs.readFileSync(mimeTypeFile, "utf-8").trim();
+  } else {
+    const ext = path.extname(filename).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".gif": "image/gif",
+      ".webp": "image/webp",
+    };
+    mimeType = mimeMap[ext] || "application/octet-stream";
+  }
   return { data, filename, mimeType };
 }

@@ -6,7 +6,7 @@ import type { Config, McpServerConfig } from "../config.js";
 import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
-import { getUpload } from "../uploads.js";
+import { getUpload, ALLOWED_IMAGE_TYPES } from "../uploads.js";
 
 const execAsync = promisify(exec);
 
@@ -112,13 +112,19 @@ export async function runOpenAI(
           const content: Array<Record<string, unknown>> = [];
           const refs: string[] = [];
           for (const att of parsed.attachments) {
+            // Use stored mimeType (accurate at save time); skip non-image attachments
+            const mimeType = att.mimeType;
+            if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+              refs.push(`[Attached file: upload:${att.fileId} (${att.filename}, ${mimeType})]`);
+              continue;
+            }
             const upload = getUpload(att.fileId);
             if (upload) {
               content.push({
                 type: "input_image",
-                image: `data:${upload.mimeType};base64,${upload.data.toString("base64")}`,
+                image: `data:${mimeType};base64,${upload.data.toString("base64")}`,
               });
-              refs.push(`[Attached file: upload:${att.fileId} (${att.filename}, ${upload.mimeType})]`);
+              refs.push(`[Attached file: upload:${att.fileId} (${att.filename}, ${mimeType})]`);
             }
           }
           // Include upload references so the model can use send_message media with upload:{fileId}

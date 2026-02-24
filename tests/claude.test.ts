@@ -36,7 +36,7 @@ describe("claude prompt construction", () => {
     expect(capturedPrompt).toBe("hello");
   });
 
-  it("passes plain string prompt (not AsyncIterable) when attachments are present", async () => {
+  it("passes string prompt with file paths when attachments are present", async () => {
     const attachments: Attachment[] = [{
       filename: "test.png",
       mimeType: "image/png",
@@ -45,15 +45,15 @@ describe("claude prompt construction", () => {
     }];
     await runClaude("describe this", config, mcpServers, vi.fn(), { attachments });
 
-    // Must be a string, not an AsyncIterable — the SDK only accepts strings
+    // Must be a string — the SDK's AsyncIterable path doesn't support image content blocks
     expect(typeof capturedPrompt).toBe("string");
   });
 
-  it("includes file paths in prompt when attachments are present", async () => {
+  it("includes file paths and Read tool instruction in prompt", async () => {
     const attachments: Attachment[] = [{
       filename: "photo.jpg",
       mimeType: "image/jpeg",
-      data: Buffer.from("fake"),
+      data: Buffer.from("fake-image"),
       filePath: "/data/uploads/uuid1/photo.jpg",
     }];
     await runClaude("what is this?", config, mcpServers, vi.fn(), { attachments });
@@ -61,7 +61,7 @@ describe("claude prompt construction", () => {
     const prompt = capturedPrompt as string;
     expect(prompt).toContain("what is this?");
     expect(prompt).toContain("/data/uploads/uuid1/photo.jpg");
-    expect(prompt).toContain("read_media_file");
+    expect(prompt).toContain("Read tool");
   });
 
   it("includes multiple file paths for multiple attachments", async () => {

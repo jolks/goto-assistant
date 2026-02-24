@@ -128,24 +128,38 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
       const mcpServers = loadMcpServers();
 
       // Extract text content
+      const videoMessage = msg.message?.videoMessage;
       const textContent =
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
         msg.message?.imageMessage?.caption ||
+        videoMessage?.caption ||
         "";
 
-      // Handle image attachments
+      // Handle image attachments (+ WhatsApp GIFs as static thumbnails)
       let attachments: Attachment[] | undefined;
       let attachmentFileId: string | undefined;
       const imageMessage = msg.message?.imageMessage;
-      if (imageMessage) {
+      const isGif = videoMessage?.gifPlayback;
+      if (imageMessage || isGif) {
         try {
-          const buffer = await downloadMediaMessage(
-            msg as Parameters<typeof downloadMediaMessage>[0],
-            "buffer",
-            {}
-          ) as Buffer;
-          const mimeType = imageMessage.mimetype || "image/jpeg";
+          let buffer: Buffer;
+          let mimeType: string;
+          if (imageMessage) {
+            // Real image: download full media
+            buffer = await downloadMediaMessage(
+              msg as Parameters<typeof downloadMediaMessage>[0],
+              "buffer",
+              {}
+            ) as Buffer;
+            mimeType = imageMessage.mimetype || "image/jpeg";
+          } else {
+            // WhatsApp GIF: actual data is mp4, so use the JPEG thumbnail instead
+            const thumbnail = videoMessage?.jpegThumbnail;
+            if (!thumbnail) throw new Error("No GIF thumbnail available");
+            buffer = Buffer.from(thumbnail);
+            mimeType = "image/jpeg";
+          }
           if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) throw new Error("Unsupported image type");
           const ext = mimeType.split("/")[1] || "jpg";
           const filename = `whatsapp-${Date.now()}.${ext}`;
@@ -251,6 +265,7 @@ export async function startWhatsApp(): Promise<void> {
   shouldReconnect = true;
   connectionStatus = "connecting";
   currentQr = null;
+  // Don't reset reconnectAttempts here — reset only on successful connection
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
@@ -416,12 +431,7 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
     let content: Record<string, any>;
     switch (mediaType) {
       case "image":
-        if (mimeType === "image/gif") {
-          // WhatsApp requires GIFs to be sent as video with gifPlayback flag
-          content = { video: source, caption, gifPlayback: true };
-        } else {
-          content = { image: source, caption };
-        }
+        content = { image: source, caption };
         break;
       case "video":
         content = { video: source, caption };
