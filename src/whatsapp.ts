@@ -3,6 +3,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   makeCacheableSignalKeyStore,
+  fetchLatestWaWebVersion,
   downloadMediaMessage,
   type WASocket,
   type BaileysEventMap,
@@ -32,6 +33,10 @@ let sock: WASocket | null = null;
 let connectionStatus: ConnectionStatus = "disconnected";
 let currentQr: string | null = null;
 let shouldReconnect = true;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_RECONNECT_DELAY = 3000; // 3 seconds
+const MAX_RECONNECT_DELAY = 60000; // 60 seconds
 
 // Per-chatId queue: serialize message processing so concurrent messages don't collide
 const chatQueues = new Map<string, Promise<void>>();
@@ -241,12 +246,16 @@ export async function startWhatsApp(): Promise<void> {
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
+  // Fetch the latest WA web version to avoid 405 protocol mismatch errors
+  const { version } = await fetchLatestWaWebVersion();
+
   sock = makeWASocket({
     auth: {
       creds: state.creds,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Baileys expects a pino logger; pass undefined to suppress logs
       keys: makeCacheableSignalKeyStore(state.keys, undefined as any),
     },
+    version,
     printQRInTerminal: false,
   });
 
@@ -265,19 +274,28 @@ export async function startWhatsApp(): Promise<void> {
       currentQr = null;
       sock = null;
 
-      if (!loggedOut && shouldReconnect) {
-        connectionStatus = "connecting";
-        console.log("WhatsApp connection closed, reconnecting...");
-        setTimeout(() => startWhatsApp(), 3000);
-      } else {
+      if (loggedOut) {
         connectionStatus = "disconnected";
-        if (loggedOut) {
-          console.log("WhatsApp logged out. Scan QR code again to reconnect.");
-        }
+        reconnectAttempts = 0;
+        console.log("WhatsApp logged out. Scan QR code again to reconnect.");
+      } else if (!shouldReconnect) {
+        connectionStatus = "disconnected";
+        reconnectAttempts = 0;
+      } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        connectionStatus = "disconnected";
+        console.log(`WhatsApp reconnection failed after ${MAX_RECONNECT_ATTEMPTS} attempts (last status: ${statusCode ?? "unknown"}). Giving up.`);
+        reconnectAttempts = 0;
+      } else {
+        reconnectAttempts++;
+        const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** (reconnectAttempts - 1), MAX_RECONNECT_DELAY);
+        connectionStatus = "connecting";
+        console.log(`WhatsApp connection closed (status: ${statusCode ?? "unknown"}), reconnecting in ${(delay / 1000).toFixed(0)}s... (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        setTimeout(() => startWhatsApp(), delay);
       }
     } else if (connection === "open") {
       connectionStatus = "connected";
       currentQr = null;
+      reconnectAttempts = 0;
       console.log("WhatsApp connected successfully.");
     }
   });
@@ -298,6 +316,7 @@ export async function startWhatsApp(): Promise<void> {
 
 export async function stopWhatsApp(): Promise<void> {
   shouldReconnect = false;
+  reconnectAttempts = 0;
   currentQr = null;
   connectionStatus = "disconnected";
   if (sock) {
