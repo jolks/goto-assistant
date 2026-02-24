@@ -191,14 +191,15 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
       expect(lastRequest?.method).toBe("POST");
       expect(lastRequest?.url).toBe("/api/messaging/send");
       expect(lastRequest?.body).toEqual({ channel: "whatsapp", message: "hello", to: "+60123456789" });
-      const content = (res.result as { content: Array<{ text: string }> }).content;
-      expect(JSON.parse(content[0].text)).toEqual({ ok: true, channel: "whatsapp", partsSent: 1 });
+      const result = res.result as { content: Array<{ text: string }>; isError?: boolean };
+      expect(JSON.parse(result.content[0].text)).toEqual({ ok: true, channel: "whatsapp", partsSent: 1 });
+      expect(result.isError).toBeUndefined();
     } finally {
       proc.kill();
     }
   });
 
-  it("send_message returns error when neither message nor media provided", async () => {
+  it("send_message returns error with isError flag when neither message nor media provided", async () => {
     const proc = spawnServer(`http://localhost:${mockPort}`);
     try {
       await handshake(proc);
@@ -208,8 +209,9 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
         method: "tools/call",
         params: { name: "send_message", arguments: { channel: "whatsapp" } },
       });
-      const content = (res.result as { content: Array<{ text: string }> }).content;
-      expect(content[0].text).toContain("message or media is required");
+      const result = res.result as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.content[0].text).toContain("message or media is required");
+      expect(result.isError).toBe(true);
       // Should not have made an HTTP request
       expect(lastRequest).toBeUndefined();
     } finally {
@@ -217,7 +219,7 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
     }
   });
 
-  it("send_message returns error when channel is a non-string type", async () => {
+  it("send_message returns error with isError flag when channel is a non-string type", async () => {
     const proc = spawnServer(`http://localhost:${mockPort}`);
     try {
       await handshake(proc);
@@ -227,8 +229,9 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
         method: "tools/call",
         params: { name: "send_message", arguments: { channel: 123, message: "hi" } },
       });
-      const content = (res.result as { content: Array<{ text: string }> }).content;
-      expect(content[0].text).toContain("channel is required and must be a string");
+      const result = res.result as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.content[0].text).toContain("channel is required and must be a string");
+      expect(result.isError).toBe(true);
       // Should not have made an HTTP request
       expect(lastRequest).toBeUndefined();
     } finally {
@@ -236,7 +239,7 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
     }
   });
 
-  it("send_message forwards HTTP error from server", async () => {
+  it("send_message forwards HTTP error from server with isError flag", async () => {
     mockResponse = { status: 400, body: { error: 'Unknown channel: "telegram"' } };
     const proc = spawnServer(`http://localhost:${mockPort}`);
     try {
@@ -250,8 +253,9 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
           arguments: { channel: "telegram", message: "hi" },
         },
       });
-      const content = (res.result as { content: Array<{ text: string }> }).content;
-      expect(content[0].text).toContain('Unknown channel: "telegram"');
+      const result = res.result as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.content[0].text).toContain('Unknown channel: "telegram"');
+      expect(result.isError).toBe(true);
     } finally {
       proc.kill();
     }
@@ -368,6 +372,27 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
     }
   });
 
+  it("logs malformed JSON to stderr", async () => {
+    const proc = spawnServer(`http://localhost:${mockPort}`);
+    try {
+      // Send invalid JSON
+      proc.stdin!.write("this is not json\n");
+      // Wait briefly for stderr output
+      const stderr = await new Promise<string>((resolve) => {
+        let buf = "";
+        proc.stderr!.on("data", (chunk: Buffer) => {
+          buf += chunk.toString();
+          if (buf.includes("[mcp-messaging]")) resolve(buf);
+        });
+        setTimeout(() => resolve(buf), 2000);
+      });
+      expect(stderr).toContain("[mcp-messaging] Malformed JSON-RPC input:");
+      expect(stderr).toContain("this is not json");
+    } finally {
+      proc.kill();
+    }
+  });
+
   it("handles server connection failure gracefully", async () => {
     // Point to a port nothing is listening on
     const proc = spawnServer("http://localhost:1");
@@ -382,8 +407,9 @@ describe.skipIf(!distExists)("mcp-messaging", () => {
           arguments: { channel: "whatsapp", message: "hi" },
         },
       });
-      const content = (res.result as { content: Array<{ text: string }> }).content;
-      expect(content[0].text).toContain("Error connecting to server");
+      const result = res.result as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.content[0].text).toContain("Error connecting to server");
+      expect(result.isError).toBe(true);
     } finally {
       proc.kill();
     }

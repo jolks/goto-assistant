@@ -25,7 +25,7 @@ vi.mock("../src/whatsapp.js", () => ({
 import { createApp } from "../src/server.js";
 import { stopCronServer, restartCronServer, isCronRunning, callCronTool } from "../src/cron.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "../src/whatsapp.js";
-import { registerChannel, unregisterChannel, listChannels } from "../src/messaging.js";
+import { registerChannel, unregisterChannel, listChannels, ChannelUnavailableError } from "../src/messaging.js";
 import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
@@ -599,18 +599,32 @@ describe("server", () => {
       expect(body.error).toContain("to must be a string");
     });
 
-    it("POST /api/messaging/send returns 400 when send function throws", async () => {
+    it("POST /api/messaging/send returns 503 when channel is unavailable", async () => {
       registerChannel("whatsapp", async () => {
-        throw new Error("WhatsApp is not connected");
+        throw new ChannelUnavailableError("WhatsApp is not connected");
       });
       const app = createApp();
       const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
         channel: "whatsapp",
         message: "hello",
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(503);
       const body = await res.json();
       expect(body.error).toBe("WhatsApp is not connected");
+    });
+
+    it("POST /api/messaging/send returns 500 for generic send errors", async () => {
+      registerChannel("whatsapp", async () => {
+        throw new Error("Unexpected failure");
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+      });
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe("Unexpected failure");
     });
 
     it("POST /api/messaging/send forwards media option to channel send function", async () => {

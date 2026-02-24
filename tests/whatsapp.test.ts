@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { splitMessage, sendWhatsAppMessage, lookupMimeType, classifyMediaType, _enqueueChat, _chatQueues } from "../src/whatsapp.js";
+import { ChannelUnavailableError } from "../src/messaging.js";
 
 describe("whatsapp", () => {
   describe("splitMessage", () => {
@@ -120,11 +121,13 @@ describe("whatsapp", () => {
   });
 
   describe("sendWhatsAppMessage", () => {
-    it("throws when socket is null", async () => {
+    it("throws ChannelUnavailableError when socket is null", async () => {
+      await expect(sendWhatsAppMessage("hello")).rejects.toThrow(ChannelUnavailableError);
       await expect(sendWhatsAppMessage("hello")).rejects.toThrow("WhatsApp is not connected");
     });
 
-    it("throws when socket is null with phone number", async () => {
+    it("throws ChannelUnavailableError when socket is null with phone number", async () => {
+      await expect(sendWhatsAppMessage("hello", "+60123456789")).rejects.toThrow(ChannelUnavailableError);
       await expect(sendWhatsAppMessage("hello", "+60123456789")).rejects.toThrow("WhatsApp is not connected");
     });
 
@@ -137,13 +140,13 @@ describe("whatsapp", () => {
       await expect(sendWhatsAppMessage("hello", "1")).rejects.toThrow("Invalid phone number");
     });
 
-    it("throws 'not connected' for self (no phone validation needed)", async () => {
-      await expect(sendWhatsAppMessage("hello", "self")).rejects.toThrow("WhatsApp is not connected");
+    it("throws ChannelUnavailableError for self (no phone validation needed)", async () => {
+      await expect(sendWhatsAppMessage("hello", "self")).rejects.toThrow(ChannelUnavailableError);
     });
 
-    it("throws 'not connected' with media file path", async () => {
+    it("throws ChannelUnavailableError with media file path", async () => {
       await expect(sendWhatsAppMessage("caption", "+60123456789", { media: "/tmp/photo.jpg" }))
-        .rejects.toThrow("WhatsApp is not connected");
+        .rejects.toThrow(ChannelUnavailableError);
     });
 
     it("throws for invalid phone with media", async () => {

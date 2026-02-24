@@ -5,12 +5,12 @@ import path from "node:path";
 import multer from "multer";
 import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
-import { listChannels, sendMessage } from "./messaging.js";
+import { listChannels, sendMessage, UnknownChannelError, ChannelUnavailableError } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
-import { saveUpload, getUpload, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
+import { saveUpload, getUpload, getUploadMeta, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
 import { SETUP_SYSTEM_PROMPT, TASK_SYSTEM_PROMPT, TASK_CREATE_SYSTEM_PROMPT } from "./prompts.js";
 
 /** Re-read config from disk and restart mcp-cron + WhatsApp as needed. */
@@ -292,19 +292,25 @@ export function createApp(): Express {
           res.status(400).json({ error: "Invalid file ID" });
           return;
         }
-        const upload = getUpload(fileId);
-        if (!upload) {
+        const meta = getUploadMeta(fileId);
+        if (!meta) {
           res.status(400).json({ error: `Upload not found: ${fileId}` });
           return;
         }
-        resolvedMedia = path.resolve(UPLOADS_DIR, fileId, upload.filename);
+        resolvedMedia = path.resolve(UPLOADS_DIR, fileId, meta.filename);
       }
       const options = resolvedMedia ? { media: resolvedMedia } : undefined;
       const partsSent = await sendMessage(channel, message ?? "", to, options);
       res.json({ ok: true, channel, partsSent });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      res.status(400).json({ error: msg, channels: listChannels() });
+      if (err instanceof UnknownChannelError) {
+        res.status(400).json({ error: msg, channels: listChannels() });
+      } else if (err instanceof ChannelUnavailableError) {
+        res.status(503).json({ error: msg, channels: listChannels() });
+      } else {
+        res.status(500).json({ error: msg, channels: listChannels() });
+      }
     }
   });
 

@@ -4,6 +4,7 @@
  */
 
 import readline from "node:readline";
+import { MCP_PROTOCOL_VERSION } from "./config.js";
 
 const BASE_URL = process.env.GOTO_ASSISTANT_URL || "http://localhost:3000";
 
@@ -11,8 +12,8 @@ function respond(msg: Record<string, unknown>): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
-function makeResult(id: number | string, content: Array<{ type: string; text: string }>) {
-  return { jsonrpc: "2.0", id, result: { content } };
+function makeResult(id: number | string, content: Array<{ type: string; text: string }>, isError = false) {
+  return { jsonrpc: "2.0", id, result: { content, ...(isError && { isError: true }) } };
 }
 
 function makeError(id: number | string, code: number, message: string) {
@@ -46,13 +47,13 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
     try {
       const res = await fetch(`${BASE_URL}/api/messaging/channels`);
       if (!res.ok) {
-        respond(makeResult(id, [{ type: "text", text: `Error: HTTP ${res.status} from server` }]));
+        respond(makeResult(id, [{ type: "text", text: `Error: HTTP ${res.status} from server` }], true));
         return;
       }
       const data = await res.json() as { channels: string[] };
       respond(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
     } catch (err) {
-      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }]));
+      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }], true));
     }
     return;
   }
@@ -60,23 +61,23 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
   if (name === "send_message") {
     const { channel, message, to, media } = args;
     if (!channel || typeof channel !== "string") {
-      respond(makeResult(id, [{ type: "text", text: "Error: channel is required and must be a string" }]));
+      respond(makeResult(id, [{ type: "text", text: "Error: channel is required and must be a string" }], true));
       return;
     }
     if (!message && !media) {
-      respond(makeResult(id, [{ type: "text", text: "Error: message or media is required" }]));
+      respond(makeResult(id, [{ type: "text", text: "Error: message or media is required" }], true));
       return;
     }
     if (message !== undefined && typeof message !== "string") {
-      respond(makeResult(id, [{ type: "text", text: "Error: message must be a string" }]));
+      respond(makeResult(id, [{ type: "text", text: "Error: message must be a string" }], true));
       return;
     }
     if (media !== undefined && typeof media !== "string") {
-      respond(makeResult(id, [{ type: "text", text: "Error: media must be a string" }]));
+      respond(makeResult(id, [{ type: "text", text: "Error: media must be a string" }], true));
       return;
     }
     if (to !== undefined && typeof to !== "string") {
-      respond(makeResult(id, [{ type: "text", text: "Error: to must be a string if provided" }]));
+      respond(makeResult(id, [{ type: "text", text: "Error: to must be a string if provided" }], true));
       return;
     }
     try {
@@ -92,12 +93,12 @@ async function handleToolCall(id: number | string, name: string, args: Record<st
       });
       const data = await res.json() as Record<string, unknown>;
       if (!res.ok) {
-        respond(makeResult(id, [{ type: "text", text: `Error: ${(data as { error?: string }).error || `HTTP ${res.status}`}` }]));
+        respond(makeResult(id, [{ type: "text", text: `Error: ${(data as { error?: string }).error || `HTTP ${res.status}`}` }], true));
         return;
       }
       respond(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
     } catch (err) {
-      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }]));
+      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }], true));
     }
     return;
   }
@@ -110,6 +111,7 @@ function handleMessage(line: string): void {
   try {
     msg = JSON.parse(line);
   } catch {
+    console.error(`[mcp-messaging] Malformed JSON-RPC input: ${line.slice(0, 200)}`);
     return;
   }
 
@@ -129,8 +131,7 @@ function handleMessage(line: string): void {
       jsonrpc: "2.0",
       id,
       result: {
-        // Hardcoded — update when MCP spec adds new versions.
-        protocolVersion: "2024-11-05",
+        protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: {} },
         serverInfo: { name: "goto-assistant-messaging", version: "1.0.0" },
       },
@@ -157,7 +158,7 @@ function handleMessage(line: string): void {
     const toolArgs = (params?.arguments ?? {}) as Record<string, unknown>;
     // .catch: tool errors are returned as content text per MCP spec, not as JSON-RPC errors
     handleToolCall(id, toolName, toolArgs).catch((err) => {
-      respond(makeResult(id, [{ type: "text", text: `Internal error: ${(err as Error).message}` }]));
+      respond(makeResult(id, [{ type: "text", text: `Internal error: ${(err as Error).message}` }], true));
     });
     return;
   }

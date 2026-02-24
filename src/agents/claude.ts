@@ -2,6 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Config, McpServerConfig } from "../config.js";
 import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment } from "./router.js";
+import { extractFileId, formatUploadRef } from "../uploads.js";
 
 export interface ClaudeOptions {
   resumeSessionId?: string;
@@ -65,17 +66,10 @@ export async function runClaude(
   // support image content blocks — it serializes them as text over IPC.
   let queryPrompt = prompt;
   if (attachments && attachments.length > 0) {
-    const paths = attachments
-      .filter((att) => att.filePath)
-      .map((att) => att.filePath);
-    if (paths.length > 0) {
-      const refs = attachments
-        .filter(a => a.filePath)
-        .map(a => {
-          const parts = a.filePath!.split("/");
-          const fileId = parts[parts.length - 2];
-          return `[Attached file: upload:${fileId} (${a.filename}, ${a.mimeType})]`;
-        });
+    const withPaths = attachments.filter((att) => att.filePath);
+    if (withPaths.length > 0) {
+      const paths = withPaths.map((att) => att.filePath);
+      const refs = withPaths.map(a => formatUploadRef(extractFileId(a.filePath!), a.filename, a.mimeType));
       queryPrompt = `${refs.join("\n")}\n${prompt}\n\n[The user attached ${paths.length} image(s). You MUST use the Read tool to view each image before responding. Do NOT describe images without reading them first. Image paths:\n${paths.join("\n")}]`;
     }
   }

@@ -3,6 +3,22 @@ export interface SendMediaOptions {
   media?: string;
 }
 
+/** Thrown when the requested channel is not registered. */
+export class UnknownChannelError extends Error {
+  constructor(channel: string, available: string[]) {
+    super(`Unknown channel: "${channel}". Available channels: ${available.join(", ") || "none"}`);
+    this.name = "UnknownChannelError";
+  }
+}
+
+/** Thrown when a channel is registered but temporarily unable to send. */
+export class ChannelUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChannelUnavailableError";
+  }
+}
+
 export type SendFn = (message: string, to?: string, options?: SendMediaOptions) => Promise<number>;
 
 const channels = new Map<string, SendFn>();
@@ -26,7 +42,7 @@ export function listChannels(): string[] {
 export async function sendMessage(channel: string, message: string, to?: string, options?: SendMediaOptions): Promise<number> {
   const send = getChannel(channel);
   if (!send) {
-    throw new Error(`Unknown channel: "${channel}". Available channels: ${listChannels().join(", ") || "none"}`);
+    throw new UnknownChannelError(channel, listChannels());
   }
   return send(message, to, options);
 }

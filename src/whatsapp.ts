@@ -12,7 +12,7 @@ import makeWASocket, {
 import QRCode from "qrcode";
 import { DATA_DIR, loadConfig, loadMcpServers } from "./config.js";
 import fs from "node:fs";
-import { registerChannel, unregisterChannel, type SendMediaOptions } from "./messaging.js";
+import { registerChannel, unregisterChannel, ChannelUnavailableError, type SendMediaOptions } from "./messaging.js";
 import { routeMessage } from "./agents/router.js";
 import type { Attachment } from "./agents/router.js";
 import {
@@ -409,7 +409,7 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
     jid = `${digits}@s.whatsapp.net`;
   }
 
-  if (!sock) throw new Error("WhatsApp is not connected");
+  if (!sock) throw new ChannelUnavailableError("WhatsApp is not connected");
 
   if (!jid) {
     const ownJid = getOwnJid();
@@ -426,7 +426,8 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
 
     // Validate local files
     if (!isUrl) {
-      const stat = fs.statSync(media, { throwIfNoEntry: false });
+      let stat: import("node:fs").Stats | undefined;
+      try { stat = await fs.promises.stat(media); } catch { /* file does not exist */ }
       if (!stat || !stat.isFile()) throw new Error(`Media file not found: ${media}`);
       if (stat.size > MAX_MEDIA_SIZE) throw new Error(`Media file exceeds 64MB limit: ${media}`);
     }
@@ -438,6 +439,7 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Baileys content types vary
     let content: Record<string, any>;
+    let sendCaptionSeparately = false;
     switch (mediaType) {
       case "image":
         content = { image: source, caption };
@@ -446,7 +448,8 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
         content = { video: source, caption };
         break;
       case "audio":
-        content = { audio: source }; // audio has no caption support
+        content = { audio: source }; // WhatsApp audio has no caption support
+        sendCaptionSeparately = !!caption;
         break;
       case "document":
         content = { document: source, mimetype: mimeType, fileName: path.basename(media), caption };
@@ -458,6 +461,13 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- content is built dynamically from a known-safe switch
     const sent = await sock.sendMessage(jid, content as any);
     if (isSelf && sent?.key?.id) trackSentId(sent.key.id);
+
+    // Audio doesn't support captions — send the text as a separate message
+    if (sendCaptionSeparately && caption) {
+      const capSent = await sock.sendMessage(jid, { text: caption });
+      if (isSelf && capSent?.key?.id) trackSentId(capSent.key.id);
+      return 2;
+    }
     return 1;
   }
 

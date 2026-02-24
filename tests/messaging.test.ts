@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { registerChannel, unregisterChannel, getChannel, listChannels, sendMessage } from "../src/messaging.js";
+import { registerChannel, unregisterChannel, getChannel, listChannels, sendMessage, UnknownChannelError } from "../src/messaging.js";
 
 describe("messaging", () => {
   beforeEach(() => {
@@ -59,14 +59,16 @@ describe("messaging", () => {
       expect(result).toBe(3);
     });
 
-    it("throws for unknown channel with helpful message", async () => {
+    it("throws UnknownChannelError for unknown channel with helpful message", async () => {
       registerChannel("whatsapp", async () => 1);
+      await expect(sendMessage("telegram", "hi")).rejects.toThrow(UnknownChannelError);
       await expect(sendMessage("telegram", "hi")).rejects.toThrow(
         'Unknown channel: "telegram". Available channels: whatsapp'
       );
     });
 
-    it("throws with 'none' when no channels registered", async () => {
+    it("throws UnknownChannelError with 'none' when no channels registered", async () => {
+      await expect(sendMessage("whatsapp", "hi")).rejects.toThrow(UnknownChannelError);
       await expect(sendMessage("whatsapp", "hi")).rejects.toThrow(
         'Unknown channel: "whatsapp". Available channels: none'
       );

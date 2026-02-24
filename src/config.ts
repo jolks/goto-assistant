@@ -26,6 +26,7 @@ export const MCP_CONFIG_PATH = path.join(DATA_DIR, "mcp.json");
 export const MEMORY_FILE_PATH = path.join(DATA_DIR, "memory.json");
 export const MEMORY_SERVER_NAME = "memory";
 export const MAX_AGENT_TURNS = 30;
+export const MCP_PROTOCOL_VERSION = "2024-11-05";
 
 export function isConfigured(): boolean {
   return fs.existsSync(CONFIG_PATH);

@@ -6,7 +6,7 @@ import type { Config, McpServerConfig } from "../config.js";
 import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
-import { getUpload, ALLOWED_IMAGE_TYPES } from "../uploads.js";
+import { getUpload, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../uploads.js";
 
 const execAsync = promisify(exec);
 
@@ -114,8 +114,9 @@ export async function runOpenAI(
           for (const att of parsed.attachments) {
             // Use stored mimeType (accurate at save time); skip non-image attachments
             const mimeType = att.mimeType;
+            const ref = formatUploadRef(att.fileId, att.filename, mimeType);
             if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
-              refs.push(`[Attached file: upload:${att.fileId} (${att.filename}, ${mimeType})]`);
+              refs.push(ref);
               continue;
             }
             const upload = getUpload(att.fileId);
@@ -124,7 +125,7 @@ export async function runOpenAI(
                 type: "input_image",
                 image: `data:${mimeType};base64,${upload.data.toString("base64")}`,
               });
-              refs.push(`[Attached file: upload:${att.fileId} (${att.filename}, ${mimeType})]`);
+              refs.push(ref);
             }
           }
           // Include upload references so the model can use send_message media with upload:{fileId}
@@ -144,9 +145,7 @@ export async function runOpenAI(
       for (const att of attachments) {
         // Build upload reference for the model to use with send_message media
         if (att.filePath) {
-          const parts = att.filePath.split("/");
-          const fileId = parts[parts.length - 2]; // .../uploads/{fileId}/{filename}
-          refs.push(`[Attached file: upload:${fileId} (${att.filename}, ${att.mimeType})]`);
+          refs.push(formatUploadRef(extractFileId(att.filePath), att.filename, att.mimeType));
         }
         // Only include image types as input_image blocks; skip non-image attachments
         if (ALLOWED_IMAGE_TYPES.includes(att.mimeType)) {

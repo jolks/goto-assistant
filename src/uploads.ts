@@ -35,19 +35,18 @@ export function saveUpload(
   return { fileId, filename, mimeType, size: buffer.length, path: filePath };
 }
 
-export function getUpload(
+/** Look up upload metadata (filename + MIME type) without reading file data. */
+export function getUploadMeta(
   fileId: string
-): { data: Buffer; filename: string; mimeType: string } | null {
+): { filename: string; mimeType: string } | null {
   const dir = path.join(UPLOADS_DIR, fileId);
   if (!fs.existsSync(dir)) return null;
 
   const files = fs.readdirSync(dir);
   if (files.length === 0) return null;
 
-  const filename = files.find((f) => f !== ".mimetype")!;
+  const filename = files.find((f) => f !== ".mimetype");
   if (!filename) return null;
-  const filePath = path.join(dir, filename);
-  const data = fs.readFileSync(filePath);
 
   // Read persisted MIME type, fall back to extension-based detection
   const mimeTypeFile = path.join(dir, ".mimetype");
@@ -65,5 +64,26 @@ export function getUpload(
     };
     mimeType = mimeMap[ext] || "application/octet-stream";
   }
-  return { data, filename, mimeType };
+  return { filename, mimeType };
+}
+
+/** Extract the file ID from an upload path (.../uploads/{fileId}/{filename}). */
+export function extractFileId(filePath: string): string {
+  const parts = filePath.split("/");
+  return parts[parts.length - 2];
+}
+
+/** Format a consistent upload reference for embedding in prompts. */
+export function formatUploadRef(fileId: string, filename: string, mimeType: string): string {
+  return `[Attached file: upload:${fileId} (${filename}, ${mimeType})]`;
+}
+
+export function getUpload(
+  fileId: string
+): { data: Buffer; filename: string; mimeType: string } | null {
+  const meta = getUploadMeta(fileId);
+  if (!meta) return null;
+  const filePath = path.join(UPLOADS_DIR, fileId, meta.filename);
+  const data = fs.readFileSync(filePath);
+  return { data, filename: meta.filename, mimeType: meta.mimeType };
 }

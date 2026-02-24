@@ -6,17 +6,22 @@ import type { Attachment, HistoryMessage } from "../src/agents/router.js";
 let capturedInput: unknown = null;
 
 // Mock uploads module to return fake image data
-vi.mock("../src/uploads.js", () => ({
-  getUpload: vi.fn().mockImplementation((fileId: string) => {
-    if (fileId === "abc") {
-      return { data: Buffer.from("fake-img"), filename: "img.png", mimeType: "image/png" };
-    }
-    return null;
-  }),
-  UPLOADS_DIR: "tests/data/uploads",
-  ALLOWED_IMAGE_TYPES: ["image/jpeg", "image/png", "image/gif", "image/webp"],
-  saveUpload: vi.fn(),
-}));
+vi.mock("../src/uploads.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/uploads.js")>();
+  return {
+    getUpload: vi.fn().mockImplementation((fileId: string) => {
+      if (fileId === "abc") {
+        return { data: Buffer.from("fake-img"), filename: "img.png", mimeType: "image/png" };
+      }
+      return null;
+    }),
+    UPLOADS_DIR: "tests/data/uploads",
+    ALLOWED_IMAGE_TYPES: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+    saveUpload: vi.fn(),
+    extractFileId: actual.extractFileId,
+    formatUploadRef: actual.formatUploadRef,
+  };
+});
 
 // Mock @openai/agents before importing runOpenAI
 const mockRun = vi.fn().mockImplementation((_agent: unknown, input: unknown) => {
