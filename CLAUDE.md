@@ -50,6 +50,13 @@ git tag v<version> && git push origin v<version>
 - `src/agents/claude.ts` — uses `@anthropic-ai/claude-agent-sdk`, supports session resumption
 - `src/agents/openai.ts` — uses `@openai/agents`, manages MCP server lifecycle
 
+**SDK singleton caching** (critical provider difference):
+- **Claude**: The Agent SDK's `query()` is stateless — it takes `env` (with `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`) as options each call. No cached singletons; every call gets fresh config.
+- **OpenAI**: The Agents SDK has a triple-layer singleton cache: `run()` → cached `Runner` → cached `OpenAIProvider` → cached `OpenAI` client. Once created, none refresh. This breaks when users change provider config at runtime (API key, base URL) via the setup page. **Fix**: `runOpenAI()` creates a fresh `Runner` with an explicit `OpenAIProvider({ apiKey, baseURL })` each call, bypassing all singletons. Do NOT use the top-level `run()` function — it will use stale config.
+
+**Chat Completions-only gateways** (OpenAI provider):
+- Some proxies (e.g. Kilo Code Gateway) only support Chat Completions, not the Responses API. `isChatCompletionsGateway()` in `src/config.ts` detects known gateways by hostname. When detected: `setOpenAIAPI("chat_completions")` switches the SDK mode, and `shellTool()` is excluded (it's a hosted tool, Responses API only). The model listing endpoint also falls back from `/v1/models` to `/models` for gateways that don't use the `/v1` prefix.
+
 **Built-in tools** (critical provider difference):
 - **Claude**: The Agent SDK provides built-in tools (Bash, Read, Write, Edit, Glob, Grep, etc.) automatically. With `permissionMode: "bypassPermissions"`, the agent can execute shell commands and file operations out of the box. `allowedTools` is set to MCP tool patterns only, but built-in tools remain available.
 - **OpenAI**: The Agents SDK has equivalent local built-in tools — `shellTool()` (Bash equivalent), `applyPatchTool()` (Edit/Write equivalent), `computerTool()` (screen automation) — but they require explicit setup. `shellTool()` in local mode needs a custom `Shell` implementation that handles `child_process.exec()`. There are also hosted tools (`webSearchTool()`, `fileSearchTool()`, `codeInterpreterTool()`, `imageGenerationTool()`) that run on OpenAI's servers. Currently configured: `shellTool()` with a `LocalShell` class that executes commands via `child_process.exec()` (30s timeout, 1MB buffer). Not yet configured: `applyPatchTool()`, `computerTool()`.

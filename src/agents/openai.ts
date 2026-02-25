@@ -1,9 +1,9 @@
-import { Agent, run, MCPServerStdio, shellTool, MaxTurnsExceededError } from "@openai/agents";
+import { Agent, Runner, MCPServerStdio, shellTool, MaxTurnsExceededError, setOpenAIAPI, OpenAIProvider } from "@openai/agents";
 import type { Shell, ShellAction, ShellResult, ShellOutputResult } from "@openai/agents";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Config, McpServerConfig } from "../config.js";
-import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
+import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
 import { getUpload, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../uploads.js";
@@ -53,6 +53,20 @@ export async function runOpenAI(
   options?: OpenAIOptions
 ): Promise<void> {
   const { attachments, history, systemPromptOverride } = options || {};
+
+  // Use Chat Completions API for gateways that don't support the Responses API
+  const useChatCompletions = isChatCompletionsGateway(config.openai.baseUrl);
+  setOpenAIAPI(useChatCompletions ? "chat_completions" : "responses");
+
+  // Create a fresh provider + runner each call so config changes (API key, base
+  // URL) take effect immediately. Both the default OpenAIProvider and default
+  // Runner are cached singletons that never refresh, so we bypass them entirely.
+  const provider = new OpenAIProvider({
+    apiKey: config.openai.apiKey,
+    baseURL: config.openai.baseUrl || undefined,
+  });
+  const runner = new Runner({ modelProvider: provider });
+
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     OPENAI_API_KEY: config.openai.apiKey,
@@ -89,7 +103,8 @@ export async function runOpenAI(
         systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. You also have a shell tool to execute commands on the host machine. You can also send messages to the user via connected messaging channels (e.g. WhatsApp) using the messaging tools — send to self or to any phone number. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
       model: config.openai.model,
       mcpServers,
-      tools: [
+      // shellTool is a hosted tool — only available with the Responses API
+      tools: useChatCompletions ? [] : [
         shellTool({ shell: new LocalShell() }),
       ],
     });
@@ -165,7 +180,7 @@ export async function runOpenAI(
     const input = inputMessages.length === 1 && !history?.length && !attachments?.length ? prompt : inputMessages;
 
     try {
-      const result = await run(agent, input as string, { stream: true, maxTurns: MAX_AGENT_TURNS });
+      const result = await runner.run(agent, input as string, { stream: true, maxTurns: MAX_AGENT_TURNS });
 
       for await (const event of result) {
         if (

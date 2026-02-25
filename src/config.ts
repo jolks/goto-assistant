@@ -176,6 +176,15 @@ export function syncMessagingMcpServer(config?: Config): void {
   saveMcpServers(servers);
 }
 
+/** Known gateways that only support Chat Completions (not the Responses API). */
+export const CHAT_COMPLETIONS_ONLY_GATEWAYS = ["api.kilo.ai"] as const;
+
+/** Check if a base URL points to a known Chat Completions-only gateway. */
+export function isChatCompletionsGateway(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  return CHAT_COMPLETIONS_ONLY_GATEWAYS.some((gw) => baseUrl.includes(gw));
+}
+
 export function getMaskedMcpServers(
   servers: Record<string, McpServerConfig>
 ): Record<string, McpServerConfig> {

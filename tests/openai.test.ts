@@ -41,9 +41,13 @@ vi.mock("@openai/agents", async (importOriginal) => {
       connect: vi.fn(),
       close: vi.fn(),
     })),
-    run: mockRun,
+    Runner: vi.fn().mockImplementation(() => ({
+      run: mockRun,
+    })),
     shellTool: vi.fn().mockImplementation(() => ({ type: "shell", name: "shell" })),
     MaxTurnsExceededError: actual.MaxTurnsExceededError,
+    setOpenAIAPI: vi.fn(),
+    OpenAIProvider: vi.fn().mockImplementation(() => ({})),
   };
 });
 
