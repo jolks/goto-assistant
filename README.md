@@ -217,13 +217,3 @@ The assistant comes pre-configured with these MCP servers:
 | **messaging** | built-in | Send messages via connected platforms (WhatsApp, more coming) |
 
 Add your own through the setup page — either via the form or by asking the setup wizard AI chat — or by editing `data/mcp.json` directly. Any MCP server that supports stdio transport will work — browse the [MCP server directory](https://github.com/modelcontextprotocol/servers) for more.
-
-### Claude Code MCP servers
-
-If you use [Claude Code](https://claude.ai/code), copy the example config to get MCP servers for development:
-
-```bash
-cp .mcp.json.example .mcp.json
-```
-
-Edit `.mcp.json` to set your preferred AI provider/model for the cron server. This file is gitignored since it contains personal preferences.
