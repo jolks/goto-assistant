@@ -1,69 +1,67 @@
 # Architecture
 
-```
-┌───────────────────────────────────────────┐  ┌────────────────────┐
-│  Browser                                   │  │  WhatsApp           │
-│  ┌───────────────────────┐  ┌────────────┐ │  │                     │
-│  │     index.html         │  │ setup.html │ │  │  Self-chat sends    │
-│  │  ┌───────┐ ┌─────────┐ │  │ (Config +  │ │  │  messages to agent  │
-│  │  │ Chat  │ │  Tasks  │ │  │  Wizard)   │ │  │                     │
-│  │  │       │ │Dashboard│ │  │            │ │  └──────────┬──────────┘
-│  │  └───────┘ └─────────┘ │  └─────┬──────┘ │             │
-│  └───────────┬────────────┘        │        │      WhatsApp servers
-│              │ WebSocket           │ HTTP   │             │ WebSocket
-└──────────────┼─────────────────────┼────────┘             │
-               │                     │                      │
-┌──────────────┼─────────────────────┼──────────────────────┼───────┐
-│  server.ts   │                     │                      │       │
-│  ┌───────────┴───┐  ┌─────────────┴─┐  ┌─────────────────┴──┐     │
-│  │  WebSocket     │  │  REST API     │  │  whatsapp.ts      │     │
-│  │  Handler       │  │  /api/*       │  │  (Baileys)        │     │
-│  └───────┬───────┘  └──────┬────────┘  └──────────┬─────────┘     │
-│          │                 │                       │              │
-│          │           ┌─────┴──────────┐            │              │
-│          │           │ /api/messaging │            │              │
-│          │           │   /send        │            │              │
-│          │           │   /channels    │            │              │
-│          │           └─────┬──────────┘            │              │
-│          │                 │                       │              │
-│          │           ┌─────┴──────────────┐        │              │
-│          │           │  messaging.ts       │        │              │
-│          │           │  Channel Registry   │────────┘              │
-│          │           │  ┌───────────────┐  │  sendWhatsAppMessage  │
-│          │           │  │ whatsapp      │──┘                       │
-│          │           │  │ (future: ...) │                          │
-│          │           │  └───────────────┘                          │
-│          │           └────────────────────┘                        │
-│          │                                                        │
-│  ┌───────┴─────────────────────────────────────────┐              │
-│  │  router.ts  ──── routes by provider              │              │
-│  └──┬─────────┬────────────────────────────────────┘              │
-│     │         │                                                   │
-│  ┌──┴───┐  ┌──┴───┐    ┌──────────────────────────────────  ┐     │
-│  │Claude│  │OpenAI│───▶│           MCP Servers              │     │
-│  │Agent │  │Agent │    │                                    │     │
-│  │ SDK  │  │ SDK  │    │  ┌────────┐  ┌────────────┐ ···    │     │
-│  └──┬───┘  └──┬───┘    │  │ memory │  │ filesystem │        │     │
-│     │         │         │  └────────┘  └────────────┘       │     │
-│     │         │         │       ▲            ▲              │     │
-│     │         │         │       │            │              │     │
-│     │         │         │  ┌────┴────────────┴───────────┐  │     │
-│     │         │         │  │         mcp-cron            │  │     │
-│     │         │         │  │  AI tasks (w/ MCP access)   │  │     │
-│     │         │         │  │  + shell commands           │  │     │
-│     │         │         │  └─────────────────────────────┘  │     │
-│     │         │         │                                   │     │
-│     │         │         │  ┌─────────────────────────────┐  │     │
-│     │         │         │  │       mcp-messaging         │  │     │
-│     │         │         │  │  ──▶ POST /api/messaging/*  │  │     │
-│     │         │         │  └─────────────────────────────┘  │     │
-│     │         │         └────────────────────────────────────┘    │
-│     │         │                                                   │
-│  ┌──┴─────────┴──┐    ┌────────────┐                              │
-│  │  sessions.ts   │───▶│  SQLite DB  │                            │
-│  │  (persistence) │    │  data/      │                            │
-│  └───────────────┘    └────────────┘                              │
-└───────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Clients
+        subgraph Browser
+            index["index.html<br/>(Chat + Tasks Dashboard)"]
+            setup["setup.html<br/>(Config Wizard)"]
+        end
+        whatsapp_client["WhatsApp<br/>(self-chat)"]
+    end
+
+    subgraph "server.ts"
+        ws["WebSocket Handler"]
+        rest["REST API /api/*"]
+        wa["whatsapp.ts (Baileys)"]
+
+        subgraph "messaging.ts — Channel Registry"
+            ch_wa["whatsapp"]
+            ch_future["future: telegram, signal, ..."]
+        end
+
+        messaging_api["/api/messaging/*"]
+
+        router["router.ts"]
+
+        subgraph providers ["routes by provider"]
+            claude["Claude Agent SDK"]
+            openai["OpenAI Agent SDK"]
+        end
+
+        sessions["sessions.ts"]
+    end
+
+    subgraph "MCP Servers"
+        memory["memory"]
+        filesystem["filesystem"]
+        other_mcp["..."]
+        cron["mcp-cron<br/>(AI tasks + shell commands)"]
+        mcp_msg["mcp-messaging<br/>→ POST /api/messaging/*"]
+    end
+
+    db[("SQLite DB<br/>data/sessions.db")]
+
+    index -- "WebSocket" --> ws
+    setup -- "HTTP" --> rest
+    whatsapp_client -- "WhatsApp servers<br/>(WebSocket)" --> wa
+
+    ws --> router
+    rest --> router
+    wa --> router
+    router --> claude & openai
+
+    rest --> messaging_api
+    messaging_api --> ch_wa
+    ch_wa -- "sendWhatsAppMessage" --> wa
+
+    claude --> memory & filesystem & other_mcp & cron & mcp_msg
+    openai --> memory & filesystem & other_mcp & cron & mcp_msg
+    cron --> memory & filesystem & other_mcp
+
+    mcp_msg -- "proxies to" --> messaging_api
+
+    sessions --> db
 ```
 
 ## Messaging Flow
