@@ -3,7 +3,7 @@ import type { Shell, ShellAction, ShellResult, ShellOutputResult } from "@openai
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Config, McpServerConfig } from "../config.js";
-import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
+import { MAX_AGENT_TURNS, MAX_HISTORY_MESSAGES, RECENT_IMAGE_WINDOW, MEMORY_FILE_PATH, MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
 import { getUpload, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../uploads.js";
@@ -43,6 +43,55 @@ export interface OpenAIOptions {
   attachments?: Attachment[];
   history?: HistoryMessage[];
   systemPromptOverride?: string;
+}
+
+/**
+ * Trim conversation history to avoid 413 errors from size-constrained gateways.
+ * 1. Cap message count to `maxMessages` (keeps most recent history + current message).
+ * 2. Strip `input_image` blocks from messages outside the `recentImageWindow`,
+ *    replacing them with a text placeholder.
+ * Returns a new array — does not mutate the original.
+ */
+export function trimHistory(
+  inputMessages: Array<Record<string, unknown>>,
+  maxMessages: number = MAX_HISTORY_MESSAGES,
+  recentImageWindow: number = RECENT_IMAGE_WINDOW
+): Array<Record<string, unknown>> {
+  if (inputMessages.length === 0) return [];
+
+  // Separate current message (last) from history
+  const current = inputMessages[inputMessages.length - 1];
+  const history = inputMessages.slice(0, -1);
+
+  // Cap history to maxMessages
+  const trimmed = history.length > maxMessages
+    ? history.slice(history.length - maxMessages)
+    : history.slice();
+
+  // Strip images from messages outside the recent window
+  const imageKeepStart = trimmed.length - recentImageWindow;
+  const result = trimmed.map((msg, i) => {
+    if (i >= imageKeepStart) return msg;
+    if (!Array.isArray(msg.content)) return msg;
+
+    const content = msg.content as Array<Record<string, unknown>>;
+    const hasImages = content.some(block => block.type === "input_image");
+    if (!hasImages) return msg;
+
+    const imageCount = content.filter(block => block.type === "input_image").length;
+    const placeholder = imageCount === 1
+      ? "[Image previously shared]"
+      : `[${imageCount} images previously shared]`;
+
+    const newContent = [
+      { type: "input_text", text: placeholder },
+      ...content.filter(block => block.type !== "input_image"),
+    ];
+    return { ...msg, content: newContent };
+  });
+
+  result.push(current);
+  return result;
 }
 
 export async function runOpenAI(
@@ -177,7 +226,8 @@ export async function runOpenAI(
       inputMessages.push({ role: "user", content: prompt });
     }
 
-    const input = inputMessages.length === 1 && !history?.length && !attachments?.length ? prompt : inputMessages;
+    const trimmedMessages = trimHistory(inputMessages);
+    const input = trimmedMessages.length === 1 && !history?.length && !attachments?.length ? prompt : trimmedMessages;
 
     try {
       const result = await runner.run(agent, input as string, { stream: true, maxTurns: MAX_AGENT_TURNS });

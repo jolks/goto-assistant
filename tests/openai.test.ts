@@ -51,7 +51,7 @@ vi.mock("@openai/agents", async (importOriginal) => {
   };
 });
 
-const { runOpenAI } = await import("../src/agents/openai.js");
+const { runOpenAI, trimHistory } = await import("../src/agents/openai.js");
 const { MaxTurnsExceededError } = await import("@openai/agents");
 
 const config: Config = {
@@ -321,5 +321,144 @@ describe("openai LocalShell", () => {
     // the mock by verifying the shell tool is configured.
     const { shellTool } = await import("@openai/agents");
     expect(shellTool).toHaveBeenCalled();
+  });
+});
+
+describe("trimHistory", () => {
+  it("returns messages unchanged when under the limit", () => {
+    const messages = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: [{ type: "output_text", text: "hello" }] },
+      { role: "user", content: "current" },
+    ];
+    const result = trimHistory(messages, 100, 10);
+    expect(result).toEqual(messages);
+  });
+
+  it("caps message count and preserves the current message", () => {
+    // 5 history messages + 1 current, cap at 3 history
+    const messages = [
+      { role: "user", content: "msg1" },
+      { role: "assistant", content: [{ type: "output_text", text: "r1" }] },
+      { role: "user", content: "msg2" },
+      { role: "assistant", content: [{ type: "output_text", text: "r2" }] },
+      { role: "user", content: "msg3" },
+      { role: "user", content: "current" },
+    ];
+    const result = trimHistory(messages, 3, 10);
+    expect(result).toHaveLength(4); // 3 history + 1 current
+    expect(result[0]).toEqual({ role: "user", content: "msg2" });
+    expect(result[result.length - 1]).toEqual({ role: "user", content: "current" });
+  });
+
+  it("strips images from messages outside the recent window", () => {
+    const oldImageMsg = {
+      role: "user",
+      content: [
+        { type: "input_image", image: "data:image/png;base64,abc123" },
+        { type: "input_text", text: "look at this" },
+      ],
+    };
+    const recentMsg = { role: "assistant", content: [{ type: "output_text", text: "ok" }] };
+    const current = { role: "user", content: "now?" };
+
+    // recentImageWindow=1 means only the last 1 history message keeps images
+    const result = trimHistory([oldImageMsg, recentMsg, current], 100, 1);
+    expect(result).toHaveLength(3);
+    // Old message should have image stripped
+    const stripped = result[0].content as Array<Record<string, unknown>>;
+    expect(stripped.find(b => b.type === "input_image")).toBeUndefined();
+    expect(stripped[0]).toEqual({ type: "input_text", text: "[Image previously shared]" });
+    expect(stripped[1]).toEqual({ type: "input_text", text: "look at this" });
+  });
+
+  it("uses plural placeholder for multiple images in a single message", () => {
+    const multiImageMsg = {
+      role: "user",
+      content: [
+        { type: "input_image", image: "data:image/png;base64,img1" },
+        { type: "input_image", image: "data:image/jpeg;base64,img2" },
+        { type: "input_text", text: "compare these" },
+      ],
+    };
+    const current = { role: "user", content: "done" };
+
+    const result = trimHistory([multiImageMsg, current], 100, 0);
+    const stripped = result[0].content as Array<Record<string, unknown>>;
+    expect(stripped[0]).toEqual({ type: "input_text", text: "[2 images previously shared]" });
+    expect(stripped).toHaveLength(2); // placeholder + original text
+  });
+
+  it("leaves plain text messages unaffected", () => {
+    const messages = [
+      { role: "user", content: "plain text" },
+      { role: "assistant", content: [{ type: "output_text", text: "reply" }] },
+      { role: "user", content: "current" },
+    ];
+    const result = trimHistory(messages, 100, 0);
+    // recentImageWindow=0 but no images to strip — messages unchanged
+    expect(result).toEqual(messages);
+  });
+
+  it("always preserves current message with images intact", () => {
+    const currentWithImage = {
+      role: "user",
+      content: [
+        { type: "input_image", image: "data:image/png;base64,currentimg" },
+        { type: "input_text", text: "what is this?" },
+      ],
+    };
+    const result = trimHistory([{ role: "user", content: "old" }, currentWithImage], 100, 0);
+    // Current message (last) should be untouched even with recentImageWindow=0
+    expect(result[result.length - 1]).toEqual(currentWithImage);
+  });
+
+  it("handles single-element array (current message only)", () => {
+    const messages = [{ role: "user", content: "only message" }];
+    const result = trimHistory(messages, 100, 10);
+    expect(result).toEqual(messages);
+  });
+
+  it("handles empty array", () => {
+    expect(trimHistory([], 100, 10)).toEqual([]);
+  });
+
+  it("applies both message cap and image stripping together", () => {
+    // Build 6 history messages: 3 with images, 3 plain text, then current
+    const messages: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < 6; i++) {
+      if (i % 2 === 0) {
+        messages.push({
+          role: "user",
+          content: [
+            { type: "input_image", image: `data:image/png;base64,img${i}` },
+            { type: "input_text", text: `msg ${i}` },
+          ],
+        });
+      } else {
+        messages.push({ role: "assistant", content: [{ type: "output_text", text: `reply ${i}` }] });
+      }
+    }
+    messages.push({ role: "user", content: "current" });
+
+    // Cap to 4 history messages, recent window of 2
+    const result = trimHistory(messages, 4, 2);
+    expect(result).toHaveLength(5); // 4 history + 1 current
+
+    // First 2 history messages (indices 0-1) are outside the recent window (4-2=2)
+    // Index 0 has an image — should be stripped
+    const first = result[0].content as Array<Record<string, unknown>>;
+    expect(first.find(b => b.type === "input_image")).toBeUndefined();
+    expect(first[0].text).toBe("[Image previously shared]");
+
+    // Last history messages (indices 2-3) are within the recent window — images preserved
+    const third = result[2].content;
+    if (Array.isArray(third)) {
+      const hasImage = (third as Array<Record<string, unknown>>).some(b => b.type === "input_image");
+      expect(hasImage).toBe(true);
+    }
+
+    // Current message always preserved
+    expect(result[result.length - 1]).toEqual({ role: "user", content: "current" });
   });
 });

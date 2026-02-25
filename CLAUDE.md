@@ -65,6 +65,7 @@ git tag v<version> && git push origin v<version>
 - **Claude**: Uses SDK session resumption (`options.resume = sessionId`). The SDK maintains history server-side — we only pass the new message each turn.
 - **OpenAI**: Stateless — has no session resumption. We must load the full message history from SQLite and pass it as the input array on every turn. See `runOpenAI()` which builds `inputMessages` from `history` parameter. Assistant messages must use `content: [{ type: "output_text", text }]` format (not plain strings) or the SDK throws `item.content.map is not a function`.
 - When adding new per-message features (attachments, metadata, etc.), ensure both history paths are updated.
+- **History trimming** (OpenAI only): `trimHistory()` in `src/agents/openai.ts` caps history to `MAX_HISTORY_MESSAGES` (100) and strips `input_image` blocks from messages outside `RECENT_IMAGE_WINDOW` (10), replacing them with a text placeholder. This prevents 413 errors from size-constrained gateways (e.g. Kilo Code Gateway on Vercel's ~4.5MB body limit). The current message (last element) is always preserved in full. Both constants are defined in `src/config.ts`.
 
 **Agent turn limits**: Both providers use `MAX_AGENT_TURNS` (defined in `src/config.ts`, currently 30) to cap tool-use loop iterations. When the limit is hit, a user-friendly message is sent via `onChunk` and the conversation ends gracefully. Claude returns an `error_max_turns` result event; OpenAI throws `MaxTurnsExceededError` (caught in `runOpenAI`).
 
