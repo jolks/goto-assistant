@@ -1,0 +1,174 @@
+/**
+ * MCP stdio server for messaging.
+ * Proxies send_message / list_channels tool calls to the main Express server's HTTP API.
+ */
+
+import readline from "node:readline";
+import { MCP_PROTOCOL_VERSION } from "./config.js";
+
+const BASE_URL = process.env.GOTO_ASSISTANT_URL || "http://localhost:3000";
+
+function respond(msg: Record<string, unknown>): void {
+  process.stdout.write(JSON.stringify(msg) + "\n");
+}
+
+function makeResult(id: number | string, content: Array<{ type: string; text: string }>, isError = false) {
+  return { jsonrpc: "2.0", id, result: { content, ...(isError && { isError: true }) } };
+}
+
+function makeError(id: number | string, code: number, message: string) {
+  return { jsonrpc: "2.0", id, error: { code, message } };
+}
+
+const TOOLS = [
+  {
+    name: "send_message",
+    description: "Send a message via a connected messaging channel (e.g. WhatsApp). Supports text, media (image/video/audio/document), or both. Use list_channels to see available channels.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channel: { type: "string", description: 'Messaging channel (e.g. "whatsapp")' },
+        message: { type: "string", description: "Text message to send (becomes caption when media is provided)" },
+        to: { type: "string", description: 'Recipient — phone number (e.g. "+60123456789") or "self" (default: self)' },
+        media: { type: "string", description: "Local file path, URL, or upload reference (upload:{fileId}) to a media file to send (image, video, audio, document). When provided, 'message' becomes the caption. Use upload:{fileId} to reference files previously shared in the conversation." },
+      },
+      required: ["channel"],
+    },
+  },
+  {
+    name: "list_channels",
+    description: "List available messaging channels.",
+    inputSchema: { type: "object", properties: {} },
+  },
+];
+
+async function handleToolCall(id: number | string, name: string, args: Record<string, unknown>) {
+  if (name === "list_channels") {
+    try {
+      const res = await fetch(`${BASE_URL}/api/messaging/channels`);
+      if (!res.ok) {
+        respond(makeResult(id, [{ type: "text", text: `Error: HTTP ${res.status} from server` }], true));
+        return;
+      }
+      const data = await res.json() as { channels: string[] };
+      respond(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
+    } catch (err) {
+      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }], true));
+    }
+    return;
+  }
+
+  if (name === "send_message") {
+    const { channel, message, to, media } = args;
+    if (!channel || typeof channel !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: channel is required and must be a string" }], true));
+      return;
+    }
+    if (!message && !media) {
+      respond(makeResult(id, [{ type: "text", text: "Error: message or media is required" }], true));
+      return;
+    }
+    if (message !== undefined && typeof message !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: message must be a string" }], true));
+      return;
+    }
+    if (media !== undefined && typeof media !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: media must be a string" }], true));
+      return;
+    }
+    if (to !== undefined && typeof to !== "string") {
+      respond(makeResult(id, [{ type: "text", text: "Error: to must be a string if provided" }], true));
+      return;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic payload
+      const payload: Record<string, any> = { channel };
+      if (message) payload.message = message;
+      if (media) payload.media = media;
+      if (to) payload.to = to;
+      const res = await fetch(`${BASE_URL}/api/messaging/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json() as Record<string, unknown>;
+      if (!res.ok) {
+        respond(makeResult(id, [{ type: "text", text: `Error: ${(data as { error?: string }).error || `HTTP ${res.status}`}` }], true));
+        return;
+      }
+      respond(makeResult(id, [{ type: "text", text: JSON.stringify(data) }]));
+    } catch (err) {
+      respond(makeResult(id, [{ type: "text", text: `Error connecting to server: ${(err as Error).message}` }], true));
+    }
+    return;
+  }
+
+  respond(makeError(id, -32601, `Unknown tool: ${name}`));
+}
+
+function handleMessage(line: string): void {
+  let msg: Record<string, unknown>;
+  try {
+    msg = JSON.parse(line);
+  } catch {
+    console.error(`[mcp-messaging] Malformed JSON-RPC input: ${line.slice(0, 200)}`);
+    return;
+  }
+
+  const id = msg.id as number | string | undefined;
+  const method = msg.method;
+  const params = msg.params as Record<string, unknown> | undefined;
+
+  if (typeof method !== "string") {
+    if (id !== undefined) {
+      respond(makeError(id, -32600, "Invalid request: missing method"));
+    }
+    return;
+  }
+
+  if (method === "initialize") {
+    respond({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: { tools: {} },
+        serverInfo: { name: "goto-assistant-messaging", version: "1.0.0" },
+      },
+    });
+    return;
+  }
+
+  if (method === "notifications/initialized") {
+    return; // no response needed
+  }
+
+  if (method === "tools/list") {
+    respond({ jsonrpc: "2.0", id, result: { tools: TOOLS } });
+    return;
+  }
+
+  if (method === "tools/call") {
+    if (id === undefined) return; // notifications don't get responses
+    const toolName = params?.name as string | undefined;
+    if (!toolName) {
+      respond(makeError(id, -32602, "Invalid params: missing tool name"));
+      return;
+    }
+    const toolArgs = (params?.arguments ?? {}) as Record<string, unknown>;
+    // .catch: tool errors are returned as content text per MCP spec, not as JSON-RPC errors
+    handleToolCall(id, toolName, toolArgs).catch((err) => {
+      respond(makeResult(id, [{ type: "text", text: `Internal error: ${(err as Error).message}` }], true));
+    });
+    return;
+  }
+
+  // Unknown method
+  if (id !== undefined) {
+    respond(makeError(id, -32601, `Method not found: ${method}`));
+  }
+}
+
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+rl.on("line", handleMessage);
+rl.on("close", () => process.exit(0));

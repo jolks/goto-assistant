@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { splitMessage, _enqueueChat, _chatQueues } from "../src/whatsapp.js";
+import { splitMessage, sendWhatsAppMessage, lookupMimeType, classifyMediaType, _enqueueChat, _chatQueues } from "../src/whatsapp.js";
+import { ChannelUnavailableError } from "../src/messaging.js";
 
 describe("whatsapp", () => {
   describe("splitMessage", () => {
@@ -56,6 +57,101 @@ describe("whatsapp", () => {
       const longMsg = "a".repeat(65001);
       const result2 = splitMessage(longMsg);
       expect(result2.length).toBeGreaterThan(1);
+    });
+  });
+
+  describe("lookupMimeType", () => {
+    it("returns correct MIME for known image extensions", () => {
+      expect(lookupMimeType("/tmp/photo.jpg")).toBe("image/jpeg");
+      expect(lookupMimeType("/tmp/photo.jpeg")).toBe("image/jpeg");
+      expect(lookupMimeType("/tmp/photo.png")).toBe("image/png");
+      expect(lookupMimeType("/tmp/photo.gif")).toBe("image/gif");
+      expect(lookupMimeType("/tmp/photo.webp")).toBe("image/webp");
+    });
+
+    it("returns correct MIME for video/audio extensions", () => {
+      expect(lookupMimeType("video.mp4")).toBe("video/mp4");
+      expect(lookupMimeType("audio.mp3")).toBe("audio/mpeg");
+      expect(lookupMimeType("audio.ogg")).toBe("audio/ogg");
+    });
+
+    it("returns correct MIME for document extensions", () => {
+      expect(lookupMimeType("file.pdf")).toBe("application/pdf");
+      expect(lookupMimeType("file.zip")).toBe("application/zip");
+    });
+
+    it("returns application/octet-stream for unknown extensions", () => {
+      expect(lookupMimeType("file.xyz")).toBe("application/octet-stream");
+      expect(lookupMimeType("noext")).toBe("application/octet-stream");
+    });
+
+    it("handles URLs by extracting path extension", () => {
+      expect(lookupMimeType("https://example.com/images/photo.png")).toBe("image/png");
+      expect(lookupMimeType("https://example.com/video.mp4?token=abc")).toBe("video/mp4");
+      expect(lookupMimeType("https://example.com/path/file.pdf")).toBe("application/pdf");
+    });
+  });
+
+  describe("classifyMediaType", () => {
+    it("classifies image MIME types", () => {
+      expect(classifyMediaType("image/jpeg")).toBe("image");
+      expect(classifyMediaType("image/png")).toBe("image");
+      expect(classifyMediaType("image/webp")).toBe("image");
+    });
+
+    it("classifies video MIME types", () => {
+      expect(classifyMediaType("video/mp4")).toBe("video");
+      expect(classifyMediaType("video/quicktime")).toBe("video");
+    });
+
+    it("classifies audio MIME types", () => {
+      expect(classifyMediaType("audio/mpeg")).toBe("audio");
+      expect(classifyMediaType("audio/ogg")).toBe("audio");
+    });
+
+    it("classifies GIFs as document to avoid Baileys sharp corruption", () => {
+      expect(classifyMediaType("image/gif")).toBe("document");
+    });
+
+    it("classifies everything else as document", () => {
+      expect(classifyMediaType("application/pdf")).toBe("document");
+      expect(classifyMediaType("application/zip")).toBe("document");
+      expect(classifyMediaType("application/octet-stream")).toBe("document");
+    });
+  });
+
+  describe("sendWhatsAppMessage", () => {
+    it("throws ChannelUnavailableError when socket is null", async () => {
+      await expect(sendWhatsAppMessage("hello")).rejects.toThrow(ChannelUnavailableError);
+      await expect(sendWhatsAppMessage("hello")).rejects.toThrow("WhatsApp is not connected");
+    });
+
+    it("throws ChannelUnavailableError when socket is null with phone number", async () => {
+      await expect(sendWhatsAppMessage("hello", "+60123456789")).rejects.toThrow(ChannelUnavailableError);
+      await expect(sendWhatsAppMessage("hello", "+60123456789")).rejects.toThrow("WhatsApp is not connected");
+    });
+
+    it("throws for invalid phone number (no digits)", async () => {
+      await expect(sendWhatsAppMessage("hello", "+++")).rejects.toThrow("Invalid phone number");
+    });
+
+    it("throws for too-short phone number", async () => {
+      await expect(sendWhatsAppMessage("hello", "12345")).rejects.toThrow("Invalid phone number");
+      await expect(sendWhatsAppMessage("hello", "1")).rejects.toThrow("Invalid phone number");
+    });
+
+    it("throws ChannelUnavailableError for self (no phone validation needed)", async () => {
+      await expect(sendWhatsAppMessage("hello", "self")).rejects.toThrow(ChannelUnavailableError);
+    });
+
+    it("throws ChannelUnavailableError with media file path", async () => {
+      await expect(sendWhatsAppMessage("caption", "+60123456789", { media: "/tmp/photo.jpg" }))
+        .rejects.toThrow(ChannelUnavailableError);
+    });
+
+    it("throws for invalid phone with media", async () => {
+      await expect(sendWhatsAppMessage("caption", "123", { media: "/tmp/photo.jpg" }))
+        .rejects.toThrow("Invalid phone number");
     });
   });
 

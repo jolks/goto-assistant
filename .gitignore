@@ -3,4 +3,4 @@ dist/
 data/
 tests/data/
 .idea/
-.mcp.json
+coverage/

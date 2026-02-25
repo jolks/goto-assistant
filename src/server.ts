@@ -3,18 +3,22 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
+import { listChannels, sendMessage, UnknownChannelError, ChannelUnavailableError } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
 import { CURRENT_CONFIG_VERSION } from "./migrations.js";
 import { createConversation, getConversation, updateSessionId, updateTitle, listConversations, saveMessage, getMessages, deleteConversation } from "./sessions.js";
 import { routeMessage, type Attachment } from "./agents/router.js";
-import { saveUpload, getUpload, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
+import { saveUpload, getUpload, getUploadMeta, ALLOWED_IMAGE_TYPES, UPLOADS_DIR } from "./uploads.js";
 import { SETUP_SYSTEM_PROMPT, TASK_SYSTEM_PROMPT, TASK_CREATE_SYSTEM_PROMPT } from "./prompts.js";
 
 /** Re-read config from disk and restart mcp-cron + WhatsApp as needed. */
 function reloadServices(config?: Config): void {
   const cfg = config ?? (isConfigured() ? loadConfig() : undefined);
+  // Sync messaging MCP server entry in mcp.json (before cron restart so cron picks it up)
+  // Note: WhatsApp channel registration happens inside whatsapp.ts on connection open/close
+  syncMessagingMcpServer(cfg);
   restartCronServer().catch((err) =>
     console.error("Failed to restart mcp-cron:", err)
   );
@@ -250,6 +254,65 @@ export function createApp(): Express {
     id: req.params.id,
     limit: parseInt(req.query.limit as string) || 1,
   }));
+
+  // --- Messaging endpoints ---
+
+  app.get("/api/messaging/channels", (_req, res) => {
+    res.json({ channels: listChannels() });
+  });
+
+  app.post("/api/messaging/send", async (req, res) => {
+    const { channel, message, to, media } = req.body;
+    if (!channel || typeof channel !== "string") {
+      res.status(400).json({ error: "channel is required" });
+      return;
+    }
+    if (!message && !media) {
+      res.status(400).json({ error: "message or media is required" });
+      return;
+    }
+    if (message !== undefined && typeof message !== "string") {
+      res.status(400).json({ error: "message must be a string" });
+      return;
+    }
+    if (media !== undefined && typeof media !== "string") {
+      res.status(400).json({ error: "media must be a string" });
+      return;
+    }
+    if (to !== undefined && typeof to !== "string") {
+      res.status(400).json({ error: "to must be a string" });
+      return;
+    }
+    try {
+      // Resolve upload:{fileId} references to actual file paths
+      let resolvedMedia = media;
+      if (media && typeof media === "string" && media.startsWith("upload:")) {
+        const fileId = media.slice("upload:".length);
+        if (!/^[a-f0-9-]+$/i.test(fileId)) {
+          res.status(400).json({ error: "Invalid file ID" });
+          return;
+        }
+        const meta = getUploadMeta(fileId);
+        if (!meta) {
+          res.status(400).json({ error: `Upload not found: ${fileId}` });
+          return;
+        }
+        resolvedMedia = path.resolve(UPLOADS_DIR, fileId, meta.filename);
+      }
+      const options = resolvedMedia ? { media: resolvedMedia } : undefined;
+      const partsSent = await sendMessage(channel, message ?? "", to, options);
+      res.json({ ok: true, channel, partsSent });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      if (err instanceof UnknownChannelError) {
+        res.status(400).json({ error: msg, channels: listChannels() });
+      } else if (err instanceof ChannelUnavailableError) {
+        res.status(503).json({ error: msg, channels: listChannels() });
+      } else {
+        res.status(500).json({ error: msg, channels: listChannels() });
+      }
+    }
+  });
 
   // --- Reload services (re-read config from disk, restart cron + WhatsApp) ---
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { saveUpload, getUpload, UPLOADS_DIR, ALLOWED_IMAGE_TYPES } from "../src/uploads.js";
+import { saveUpload, getUpload, UPLOADS_DIR, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../src/uploads.js";
 
 describe("uploads", () => {
   beforeEach(() => {
@@ -59,5 +59,33 @@ describe("uploads", () => {
     expect(ALLOWED_IMAGE_TYPES).toContain("image/gif");
     expect(ALLOWED_IMAGE_TYPES).toContain("image/webp");
     expect(ALLOWED_IMAGE_TYPES).not.toContain("application/pdf");
+  });
+
+  describe("extractFileId", () => {
+    it("extracts file ID from a standard upload path", () => {
+      expect(extractFileId("/data/uploads/abc-123/photo.png")).toBe("abc-123");
+    });
+
+    it("extracts file ID from a relative path", () => {
+      expect(extractFileId("uploads/def-456/image.jpg")).toBe("def-456");
+    });
+
+    it("works with paths containing many segments", () => {
+      expect(extractFileId("/home/user/data/uploads/uuid-here/file.txt")).toBe("uuid-here");
+    });
+  });
+
+  describe("formatUploadRef", () => {
+    it("formats a standard upload reference", () => {
+      expect(formatUploadRef("abc-123", "photo.png", "image/png")).toBe(
+        "[Attached file: upload:abc-123 (photo.png, image/png)]"
+      );
+    });
+
+    it("formats reference with various MIME types", () => {
+      expect(formatUploadRef("id1", "video.mp4", "video/mp4")).toBe(
+        "[Attached file: upload:id1 (video.mp4, video/mp4)]"
+      );
+    });
   });
 });

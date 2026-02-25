@@ -1,7 +1,7 @@
 import { createApp, createServer } from "./server.js";
-import { isConfigured, loadConfig } from "./config.js";
+import { isConfigured, loadConfig, syncMessagingMcpServer } from "./config.js";
 import { runMigrations } from "./migrations.js";
-import { startCronServer, stopCronServer } from "./cron.js";
+import { startCronServer, stopCronServer, stopCronSync } from "./cron.js";
 import { startWhatsApp, stopWhatsApp } from "./whatsapp.js";
 
 runMigrations();
@@ -16,10 +16,12 @@ server.listen(port, () => {
   if (!isConfigured()) {
     console.log("First run detected — visit the URL above to configure.");
   } else {
+    const config = loadConfig();
+    // Channel registration happens inside whatsapp.ts on connection open
+    syncMessagingMcpServer(config);
     startCronServer().catch((err) =>
       console.error("Failed to start mcp-cron:", err)
     );
-    const config = loadConfig();
     if (config.whatsapp?.enabled) {
       startWhatsApp().catch((err) =>
         console.error("Failed to start WhatsApp:", err)
@@ -37,3 +39,4 @@ function shutdown() {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+process.on("exit", () => { stopCronSync(); });

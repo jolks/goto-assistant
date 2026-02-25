@@ -36,7 +36,7 @@ describe("claude prompt construction", () => {
     expect(capturedPrompt).toBe("hello");
   });
 
-  it("passes plain string prompt (not AsyncIterable) when attachments are present", async () => {
+  it("passes string prompt with file paths when attachments are present", async () => {
     const attachments: Attachment[] = [{
       filename: "test.png",
       mimeType: "image/png",
@@ -45,15 +45,15 @@ describe("claude prompt construction", () => {
     }];
     await runClaude("describe this", config, mcpServers, vi.fn(), { attachments });
 
-    // Must be a string, not an AsyncIterable — the SDK only accepts strings
+    // Must be a string — the SDK's AsyncIterable path doesn't support image content blocks
     expect(typeof capturedPrompt).toBe("string");
   });
 
-  it("includes file paths in prompt when attachments are present", async () => {
+  it("includes file paths and Read tool instruction in prompt", async () => {
     const attachments: Attachment[] = [{
       filename: "photo.jpg",
       mimeType: "image/jpeg",
-      data: Buffer.from("fake"),
+      data: Buffer.from("fake-image"),
       filePath: "/data/uploads/uuid1/photo.jpg",
     }];
     await runClaude("what is this?", config, mcpServers, vi.fn(), { attachments });
@@ -61,7 +61,7 @@ describe("claude prompt construction", () => {
     const prompt = capturedPrompt as string;
     expect(prompt).toContain("what is this?");
     expect(prompt).toContain("/data/uploads/uuid1/photo.jpg");
-    expect(prompt).toContain("read_media_file");
+    expect(prompt).toContain("Read tool");
   });
 
   it("includes multiple file paths for multiple attachments", async () => {
@@ -107,5 +107,78 @@ describe("claude max turns handling", () => {
 
     expect(chunks.join("")).toContain("reached the maximum number of tool-use turns");
     expect(result.sessionId).toBe("sess-init");
+  });
+});
+
+describe("claude assistant message streaming", () => {
+  it("calls onChunk for text content blocks in assistant messages", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield {
+          type: "assistant",
+          content: [
+            { type: "text", text: "Hello " },
+            { type: "text", text: "world" },
+          ],
+        };
+        yield { type: "result", subtype: "success", session_id: "sess-2" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    await runClaude("hi", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks).toContain("Hello ");
+    expect(chunks).toContain("world");
+  });
+
+  it("skips non-text content blocks (e.g. tool_use)", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield {
+          type: "assistant",
+          content: [
+            { type: "tool_use", id: "t1", name: "read_graph" },
+            { type: "text", text: "only this" },
+          ],
+        };
+        yield { type: "result", subtype: "success", session_id: "sess-3" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    await runClaude("hi", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks).toEqual(["only this"]);
+  });
+});
+
+describe("claude result text emission", () => {
+  it("emits result text via onChunk on success", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: "result", subtype: "success", session_id: "sess-4", result: "Final answer" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    await runClaude("question", config, mcpServers, (text) => chunks.push(text));
+
+    expect(chunks).toContain("Final answer");
+  });
+
+  it("returns sessionId from init event when result has none", async () => {
+    mockQuery.mockImplementationOnce(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: "system", subtype: "init", session_id: "sess-from-init" };
+        yield { type: "result", subtype: "success", result: "done" };
+      },
+    }));
+
+    const chunks: string[] = [];
+    const result = await runClaude("hi", config, mcpServers, (text) => chunks.push(text));
+
+    expect(result.sessionId).toBe("sess-from-init");
+    expect(chunks).toContain("done");
   });
 });

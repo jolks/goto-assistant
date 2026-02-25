@@ -26,6 +26,7 @@ export const MCP_CONFIG_PATH = path.join(DATA_DIR, "mcp.json");
 export const MEMORY_FILE_PATH = path.join(DATA_DIR, "memory.json");
 export const MEMORY_SERVER_NAME = "memory";
 export const MAX_AGENT_TURNS = 30;
+export const MCP_PROTOCOL_VERSION = "2024-11-05";
 
 export function isConfigured(): boolean {
   return fs.existsSync(CONFIG_PATH);
@@ -141,6 +142,38 @@ export function getMaskedConfig(config: Config): Config {
     claude: { ...config.claude, apiKey: maskApiKey(config.claude.apiKey) },
     openai: { ...config.openai, apiKey: maskApiKey(config.openai.apiKey) },
   };
+}
+
+export const MESSAGING_SERVER_NAME = "messaging";
+
+/**
+ * Auto-manage the messaging MCP server entry in mcp.json.
+ * Adds when any messaging channel is enabled; removes when none are.
+ * Updates GOTO_ASSISTANT_URL when the port changes.
+ */
+export function syncMessagingMcpServer(config?: Config): void {
+  const cfg = config ?? (isConfigured() ? loadConfig() : undefined);
+  if (!cfg) return;
+
+  const servers = loadMcpServers();
+  const hasMessagingChannel = cfg.whatsapp?.enabled === true;
+  const port = cfg.server.port;
+  const url = `http://localhost:${port}`;
+
+  if (hasMessagingChannel) {
+    // Always resolve to dist/ — works in both dev (src/../dist/) and prod (dist/../dist/)
+    const entryPoint = path.resolve(import.meta.dirname, "..", "dist", "mcp-messaging.js");
+    const desired: McpServerConfig = { command: "node", args: [entryPoint], env: { GOTO_ASSISTANT_URL: url } };
+    // Key order is deterministic (both objects built programmatically).
+    // Hand-edited mcp.json with different key order causes a harmless re-write.
+    if (JSON.stringify(servers[MESSAGING_SERVER_NAME]) === JSON.stringify(desired)) return;
+    servers[MESSAGING_SERVER_NAME] = desired;
+  } else {
+    if (!(MESSAGING_SERVER_NAME in servers)) return;
+    delete servers[MESSAGING_SERVER_NAME];
+  }
+
+  saveMcpServers(servers);
 }
 
 export function getMaskedMcpServers(

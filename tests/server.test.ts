@@ -15,9 +15,17 @@ vi.mock("../src/cron.js", () => ({
   isCronRunning: vi.fn().mockReturnValue(false),
   callCronTool: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("../src/whatsapp.js", () => ({
+  startWhatsApp: vi.fn().mockResolvedValue(undefined),
+  stopWhatsApp: vi.fn().mockResolvedValue(undefined),
+  getWhatsAppStatus: vi.fn().mockReturnValue("disconnected"),
+  getWhatsAppQrDataUri: vi.fn().mockResolvedValue(null),
+}));
 
 import { createApp } from "../src/server.js";
-import { stopCronServer, isCronRunning, callCronTool } from "../src/cron.js";
+import { stopCronServer, restartCronServer, isCronRunning, callCronTool } from "../src/cron.js";
+import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "../src/whatsapp.js";
+import { registerChannel, unregisterChannel, listChannels, ChannelUnavailableError } from "../src/messaging.js";
 import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
@@ -35,6 +43,10 @@ describe("server", () => {
     cleanupConfigFiles();
     cleanupDbFiles();
     if (fs.existsSync(UPLOADS_DIR)) fs.rmSync(UPLOADS_DIR, { recursive: true });
+    // Clean up messaging channels
+    for (const name of listChannels()) {
+      unregisterChannel(name);
+    }
   });
 
   it("GET /health returns 200", async () => {
@@ -487,6 +499,405 @@ describe("server", () => {
       const res = await makeRequest(app, "GET", "/api/tasks/t1/results?limit=5");
       expect(res.status).toBe(200);
       expect(callCronTool).toHaveBeenCalledWith("get_task_result", { id: "t1", limit: 5 });
+    });
+  });
+
+  describe("messaging API endpoints", () => {
+    beforeEach(() => {
+      saveConfig(testConfig);
+    });
+
+    it("GET /api/messaging/channels returns empty when no channels registered", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/messaging/channels");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.channels).toEqual([]);
+    });
+
+    it("GET /api/messaging/channels returns registered channels", async () => {
+      registerChannel("whatsapp", async () => 1);
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/messaging/channels");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.channels).toEqual(["whatsapp"]);
+    });
+
+    it("POST /api/messaging/send returns 400 when channel is missing", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, { message: "hi" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("channel is required");
+    });
+
+    it("POST /api/messaging/send returns 400 when neither message nor media is provided", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, { channel: "whatsapp" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("message or media is required");
+    });
+
+    it("POST /api/messaging/send returns 400 for unknown channel", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "telegram",
+        message: "hi",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('Unknown channel: "telegram"');
+      expect(body.channels).toEqual([]);
+    });
+
+    it("POST /api/messaging/send succeeds for registered channel", async () => {
+      let captured: { message: string; to?: string } | undefined;
+      registerChannel("whatsapp", async (message, to) => {
+        captured = { message, to };
+        return 2;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello world",
+        to: "+60123456789",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.channel).toBe("whatsapp");
+      expect(body.partsSent).toBe(2);
+      expect(captured).toEqual({ message: "hello world", to: "+60123456789" });
+    });
+
+    it("POST /api/messaging/send defaults to self when to is omitted", async () => {
+      let capturedTo: string | undefined;
+      registerChannel("whatsapp", async (_message, to) => {
+        capturedTo = to;
+        return 1;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+      });
+      expect(res.status).toBe(200);
+      expect(capturedTo).toBeUndefined();
+    });
+
+    it("POST /api/messaging/send returns 400 when to is a non-string value", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+        to: 123,
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("to must be a string");
+    });
+
+    it("POST /api/messaging/send returns 503 when channel is unavailable", async () => {
+      registerChannel("whatsapp", async () => {
+        throw new ChannelUnavailableError("WhatsApp is not connected");
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+      });
+      expect(res.status).toBe(503);
+      const body = await res.json();
+      expect(body.error).toBe("WhatsApp is not connected");
+    });
+
+    it("POST /api/messaging/send returns 500 for generic send errors", async () => {
+      registerChannel("whatsapp", async () => {
+        throw new Error("Unexpected failure");
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+      });
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe("Unexpected failure");
+    });
+
+    it("POST /api/messaging/send forwards media option to channel send function", async () => {
+      let capturedOptions: { media?: string } | undefined;
+      registerChannel("whatsapp", async (_message, _to, options) => {
+        capturedOptions = options;
+        return 1;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "caption",
+        media: "/tmp/photo.jpg",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(capturedOptions).toEqual({ media: "/tmp/photo.jpg" });
+    });
+
+    it("POST /api/messaging/send succeeds with media only (no message)", async () => {
+      let capturedMessage: string | undefined;
+      registerChannel("whatsapp", async (message) => {
+        capturedMessage = message;
+        return 1;
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        media: "/tmp/photo.jpg",
+      });
+      expect(res.status).toBe(200);
+      expect(capturedMessage).toBe("");
+    });
+
+    it("POST /api/messaging/send returns 400 when media is non-string", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "hello",
+        media: 123,
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("media must be a string");
+    });
+
+    it("POST /api/messaging/send resolves upload:{fileId} to actual file path", async () => {
+      // Upload a file first
+      const app = createApp();
+      const uploadRes = await makeUploadRequest(app, "photo.png", "image/png", Buffer.from("fake-png"));
+      const { fileId } = await uploadRes.json();
+
+      let capturedOptions: { media?: string } | undefined;
+      registerChannel("whatsapp", async (_message, _to, options) => {
+        capturedOptions = options;
+        return 1;
+      });
+
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "check this",
+        media: `upload:${fileId}`,
+      });
+      expect(res.status).toBe(200);
+      // The resolved path should point to the actual file, not the upload: reference
+      expect(capturedOptions?.media).toContain(fileId);
+      expect(capturedOptions?.media).toContain("photo.png");
+      expect(capturedOptions?.media).not.toContain("upload:");
+    });
+
+    it("POST /api/messaging/send returns 400 for path traversal in upload fileId", async () => {
+      const app = createApp();
+      registerChannel("whatsapp", async () => 1);
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "check this",
+        media: "upload:../../etc/passwd",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid file ID");
+    });
+
+    it("POST /api/messaging/send returns 400 for unknown upload:{fileId}", async () => {
+      const app = createApp();
+      registerChannel("whatsapp", async () => 1);
+      const res = await makeRequest(app, "POST", "/api/messaging/send", true, {
+        channel: "whatsapp",
+        message: "check this",
+        media: "upload:a0b1c2d3-e4f5-6789-abcd-ef0123456789",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Upload not found");
+    });
+  });
+
+  describe("POST /api/models", () => {
+    it("returns hardcoded Claude models for provider: claude", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "claude" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.models).toBeInstanceOf(Array);
+      expect(body.models.length).toBeGreaterThanOrEqual(3);
+      expect(body.models.some((m: { id: string }) => m.id.includes("claude"))).toBe(true);
+    });
+
+    it("returns sorted model list for provider: openai", async () => {
+      const mockModels = { data: [{ id: "gpt-4o" }, { id: "gpt-3.5-turbo" }] };
+      const originalFetch = globalThis.fetch;
+      // Mock only OpenAI API calls, pass through localhost requests
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (urlStr.includes("/v1/models")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockModels) });
+        }
+        return originalFetch(url as RequestInfo, opts);
+      }) as unknown as typeof fetch;
+
+      try {
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, {
+          provider: "openai",
+          apiKey: "sk-test",
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.models).toEqual([
+          { id: "gpt-3.5-turbo", name: "gpt-3.5-turbo" },
+          { id: "gpt-4o", name: "gpt-4o" },
+        ]);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("returns 400 when OpenAI API fails", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (urlStr.includes("/v1/models")) {
+          return Promise.resolve({ ok: false });
+        }
+        return originalFetch(url as RequestInfo, opts);
+      }) as unknown as typeof fetch;
+
+      try {
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, {
+          provider: "openai",
+          apiKey: "sk-bad",
+        });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toContain("Failed to fetch models");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("returns 400 for invalid provider", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "gemini" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid provider");
+    });
+  });
+
+  describe("WhatsApp endpoints", () => {
+    it("GET /api/whatsapp/status returns enabled:false when unconfigured", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/whatsapp/status");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(false);
+      expect(body.status).toBe("disconnected");
+    });
+
+    it("GET /api/whatsapp/status returns config-based enabled + mock status when configured", async () => {
+      saveConfig({ ...testConfig, whatsapp: { enabled: true } });
+      vi.mocked(getWhatsAppStatus).mockReturnValue("connected");
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/whatsapp/status");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(true);
+      expect(body.status).toBe("connected");
+    });
+
+    it("GET /api/whatsapp/qr returns mock QR data", async () => {
+      vi.mocked(getWhatsAppQrDataUri).mockResolvedValue("data:image/png;base64,abc");
+      const app = createApp();
+      const res = await makeRequest(app, "GET", "/api/whatsapp/qr");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.qr).toBe("data:image/png;base64,abc");
+    });
+
+    it("POST /api/whatsapp/connect returns ok + status on success", async () => {
+      vi.mocked(startWhatsApp).mockResolvedValue(undefined);
+      vi.mocked(getWhatsAppStatus).mockReturnValue("connected");
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/whatsapp/connect");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.status).toBe("connected");
+    });
+
+    it("POST /api/whatsapp/connect returns 500 when startWhatsApp() throws", async () => {
+      vi.mocked(startWhatsApp).mockRejectedValue(new Error("Baileys crash"));
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/whatsapp/connect");
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe("Baileys crash");
+    });
+
+    it("POST /api/whatsapp/disconnect returns ok on success", async () => {
+      vi.mocked(stopWhatsApp).mockResolvedValue(undefined);
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/whatsapp/disconnect");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.status).toBe("disconnected");
+    });
+  });
+
+  describe("other endpoint gaps", () => {
+    it("GET /api/conversations returns conversation list (filtered by setup=0)", async () => {
+      saveConfig(testConfig);
+      const app = createApp();
+      createConversation("claude", 0);
+      createConversation("claude", 1); // setup conversation — should be filtered
+
+      const res = await makeRequest(app, "GET", "/api/conversations");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      // listConversations() filters out setup conversations
+      expect(body.conversations.length).toBe(1);
+    });
+
+    it("POST /api/reload returns ok and triggers reloadServices", async () => {
+      saveConfig(testConfig);
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/reload");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      // restartCronServer should have been called
+      expect(restartCronServer).toHaveBeenCalled();
+    });
+
+    it("POST /api/setup returns 400 when provider missing", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/setup", true, {
+        server: { port: 3000 },
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid config");
+    });
+
+    it("POST /api/mcp-servers returns 400 when mcpServers is not an object", async () => {
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/mcp-servers", true, {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid mcpServers");
     });
   });
 });
