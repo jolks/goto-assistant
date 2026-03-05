@@ -80,10 +80,18 @@ export function createApp(): Express {
 
     if (provider === "openai") {
       try {
-        const url = `${baseUrl || "https://api.openai.com"}/v1/models`;
-        const response = await fetch(url, {
+        const base = (baseUrl || "https://api.openai.com").replace(/\/+$/, "");
+        let url = `${base}/v1/models`;
+        let response = await fetch(url, {
           headers: { Authorization: `Bearer ${apiKey}` },
         });
+        // Retry without /v1 prefix for gateways that don't use it (e.g. Kilo)
+        if (!response.ok && baseUrl) {
+          url = `${base}/models`;
+          response = await fetch(url, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+        }
         if (!response.ok) {
           res.status(400).json({ error: "Failed to fetch models. Check your API key." });
           return;
