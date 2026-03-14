@@ -3,13 +3,13 @@ import type { Shell, ShellAction, ShellResult, ShellOutputResult } from "@openai
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import createDebug from "debug";
-
-const debug = createDebug("goto-assistant:openai");
 import type { Config, McpServerConfig } from "../config.js";
 import { MAX_AGENT_TURNS, MAX_HISTORY_MESSAGES, RECENT_IMAGE_WINDOW, MEMORY_FILE_PATH, MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
 import { getUpload, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../uploads.js";
+
+const debug = createDebug("goto-assistant:openai");
 
 const execAsync = promisify(exec);
 
@@ -106,9 +106,9 @@ export async function runOpenAI(
 ): Promise<void> {
   const { attachments, history, systemPromptOverride } = options || {};
 
-  // Disable tracing — it requires an OpenAI API key which isn't available for
-  // third-party gateways (Gemini, Kilo, etc.) and we don't need it.
-  setTracingDisabled(true);
+  // Disable tracing for non-default providers (gateways/proxies) where the
+  // OpenAI tracing API isn't available. Keep it enabled for direct OpenAI usage.
+  setTracingDisabled(!!config.openai.baseUrl);
 
   // Use Chat Completions API for gateways that don't support the Responses API
   const useChatCompletions = isChatCompletionsGateway(config.openai.baseUrl);
