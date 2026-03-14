@@ -21,6 +21,9 @@ pnpm build
 # Production
 pnpm start
 
+# Debug logging (OpenAI provider)
+DEBUG=goto-assistant:*,openai-agents:* pnpm dev
+
 # Lint
 pnpm lint              # run ESLint
 
@@ -55,7 +58,8 @@ git tag v<version> && git push origin v<version>
 - **OpenAI**: The Agents SDK has a triple-layer singleton cache: `run()` → cached `Runner` → cached `OpenAIProvider` → cached `OpenAI` client. Once created, none refresh. This breaks when users change provider config at runtime (API key, base URL) via the setup page. **Fix**: `runOpenAI()` creates a fresh `Runner` with an explicit `OpenAIProvider({ apiKey, baseURL })` each call, bypassing all singletons. Do NOT use the top-level `run()` function — it will use stale config.
 
 **Chat Completions-only gateways** (OpenAI provider):
-- Some proxies (e.g. Kilo Code Gateway) only support Chat Completions, not the Responses API. `isChatCompletionsGateway()` in `src/config.ts` detects known gateways by hostname. When detected: `setOpenAIAPI("chat_completions")` switches the SDK mode, and `shellTool()` is excluded (it's a hosted tool, Responses API only). The model listing endpoint also falls back from `/v1/models` to `/models` for gateways that don't use the `/v1` prefix.
+- Some proxies (e.g. Kilo Code Gateway, Google Gemini) only support Chat Completions, not the Responses API. `isChatCompletionsGateway()` in `src/config.ts` detects known gateways by hostname (`api.kilo.ai`, `generativelanguage.googleapis.com`). When detected: `setOpenAIAPI("chat_completions")` switches the SDK mode, and `shellTool()` is excluded (it's a hosted tool, Responses API only). The model listing endpoint also falls back from `/v1/models` to `/models` for gateways that don't use the `/v1` prefix.
+- **Gemini thinking models** (e.g. `gemini-3.1-*`) require `thought_signature` to be echoed back in tool result requests — the OpenAI Agents SDK's built-in `OpenAIProvider` does not support this, so tool calls will fail with 400. Use non-thinking models (e.g. `gemini-2.5-flash`) instead. The fix exists in `@openai/agents-extensions`'s AI SDK integration ([PR #718](https://github.com/openai/openai-agents-js/pull/718)) but requires switching from `OpenAIProvider` to a Vercel AI SDK model provider (e.g. `@ai-sdk/google`).
 
 **Built-in tools** (critical provider difference):
 - **Claude**: The Agent SDK provides built-in tools (Bash, Read, Write, Edit, Glob, Grep, etc.) automatically. With `permissionMode: "bypassPermissions"`, the agent can execute shell commands and file operations out of the box. `allowedTools` is set to MCP tool patterns only, but built-in tools remain available.

@@ -4,7 +4,7 @@
 
 # goto-assistant
 
-Lightweight, self-hosted AI assistant with first-class MCP support. Supports Claude and OpenAI, with web and WhatsApp interfaces.
+Lightweight, self-hosted AI assistant with first-class MCP support. Supports Claude, OpenAI, and OpenAI-compatible providers (Gemini, Groq, Ollama, etc.), with web and WhatsApp interfaces.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ Open http://localhost:3000 — first run redirects to setup page for API key con
 ### Requirements
 - [Node.js](https://nodejs.org/) 20.11 or later — `npx` runs the app and most MCP servers
 - [uv](https://docs.astral.sh/uv/) — `uvx` runs the time MCP server (Python-based)
-- Anthropic or OpenAI API key
+- Anthropic, OpenAI, or OpenAI-compatible API key (Gemini, Groq, Ollama, etc.)
 
 ### Data Storage
 All data (config, conversations, uploads) stored in `~/.goto-assistant/`.
@@ -202,7 +202,9 @@ See [docs/architecture.md](docs/architecture.md) for the full architecture diagr
 App configuration is stored in `data/config.json` (created on first setup). MCP server configuration is stored separately in `data/mcp.json`. Environment variables override file config:
 
 - `ANTHROPIC_API_KEY` — API key for Claude
-- `OPENAI_API_KEY` — API key for OpenAI
+- `OPENAI_API_KEY` — API key for OpenAI (also used for OpenAI-compatible providers)
+
+For OpenAI-compatible providers, set the base URL in the setup page (e.g. `https://generativelanguage.googleapis.com/v1beta/openai` for Gemini). The app auto-detects known gateways and switches to the Chat Completions API when needed.
 
 ## MCP Servers
 

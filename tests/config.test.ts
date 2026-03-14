@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, MESSAGING_SERVER_NAME, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
+import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, isChatCompletionsGateway, MESSAGING_SERVER_NAME, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
 
 describe("config", () => {
@@ -311,6 +311,28 @@ describe("config", () => {
       // No config file on disk, no config passed
       syncMessagingMcpServer();
       expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(false);
+    });
+  });
+
+  describe("isChatCompletionsGateway", () => {
+    it("returns false for undefined", () => {
+      expect(isChatCompletionsGateway(undefined)).toBe(false);
+    });
+
+    it("returns false for direct OpenAI", () => {
+      expect(isChatCompletionsGateway("https://api.openai.com/v1")).toBe(false);
+    });
+
+    it("returns true for Kilo gateway", () => {
+      expect(isChatCompletionsGateway("https://api.kilo.ai/api/gateway")).toBe(true);
+    });
+
+    it("returns true for Gemini gateway", () => {
+      expect(isChatCompletionsGateway("https://generativelanguage.googleapis.com/v1beta/openai")).toBe(true);
+    });
+
+    it("returns false for localhost", () => {
+      expect(isChatCompletionsGateway("http://localhost:11434/v1")).toBe(false);
     });
   });
 
