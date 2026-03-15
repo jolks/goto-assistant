@@ -173,7 +173,7 @@ Messages go through the same AI pipeline as the web chat. The agent only respond
 
 ## Architecture
 
-Browser and WhatsApp clients connect to `server.ts` (WebSocket + REST), which routes messages through `router.ts` to the Claude or OpenAI agent SDK. Agents access MCP servers (memory, filesystem, cron, messaging, etc.) for extended capabilities. Messaging flows through a channel registry — the `mcp-messaging` MCP server proxies tool calls to `POST /api/messaging/send`, which routes to the appropriate channel (WhatsApp, etc.).
+Browser and WhatsApp clients connect to `server.ts` (WebSocket + REST), which routes messages through `router.ts` to the Claude or OpenAI agent SDK. Agents access MCP servers (memory, filesystem, cron, messaging, etc.) for extended capabilities. Messaging flows through a channel registry — the `mcp-messaging` MCP server proxies tool calls to `POST /api/messaging/send`, which routes to the appropriate channel (WhatsApp, etc.). The `episodic-memory` MCP server provides full-text search over past conversations and task results using SQLite FTS5, enabling the agent to recall prior interactions.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture diagram.
 
@@ -217,5 +217,6 @@ The assistant comes pre-configured with these MCP servers:
 | **time** | [`mcp-server-time`](https://github.com/modelcontextprotocol/servers/tree/main/src/time) | Current time and timezone conversions |
 | **cron** | [`mcp-cron`](https://github.com/jolks/mcp-cron) | Schedule or run on-demand shell commands and AI prompts with access to MCP servers |
 | **messaging** | built-in | Send messages via connected platforms (WhatsApp, more coming) |
+| **episodic-memory** | built-in | Full-text search over past conversations and task results |
 
 Add your own through the setup page — either via the form or by asking the setup wizard AI chat — or by editing `data/mcp.json` directly. Any MCP server that supports stdio transport will work — browse the [MCP server directory](https://github.com/modelcontextprotocol/servers) for more.

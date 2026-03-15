@@ -38,9 +38,11 @@ flowchart TD
         other_mcp["..."]
         cron["mcp-cron<br/>(AI tasks + shell commands)"]
         mcp_msg["mcp-messaging<br/>→ POST /api/messaging/*"]
+        episodic["episodic-memory<br/>(FTS5 search)"]
     end
 
     db[("SQLite DB<br/>data/sessions.db")]
+    cron_db[("mcp-cron<br/>results.db")]
 
     index -- "WebSocket" --> ws
     setup -- "HTTP" --> rest
@@ -55,13 +57,15 @@ flowchart TD
     messaging_api --> ch_wa
     ch_wa -- "sendWhatsAppMessage" --> wa
 
-    claude --> memory & filesystem & other_mcp & cron & mcp_msg
-    openai --> memory & filesystem & other_mcp & cron & mcp_msg
+    claude --> memory & filesystem & other_mcp & cron & mcp_msg & episodic
+    openai --> memory & filesystem & other_mcp & cron & mcp_msg & episodic
     cron --> memory & filesystem & other_mcp
 
     mcp_msg -- "proxies to" --> messaging_api
 
     sessions --> db
+    episodic -. "reads" .-> db
+    episodic -. "reads" .-> cron_db
 ```
 
 ## Messaging Flow
