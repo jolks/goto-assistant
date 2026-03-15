@@ -147,6 +147,7 @@ export function getMaskedConfig(config: Config): Config {
 }
 
 export const MESSAGING_SERVER_NAME = "messaging";
+export const EPISODIC_SERVER_NAME = "episodic-memory";
 
 /**
  * Auto-manage the messaging MCP server entry in mcp.json.
@@ -175,6 +176,45 @@ export function syncMessagingMcpServer(config?: Config): void {
     delete servers[MESSAGING_SERVER_NAME];
   }
 
+  saveMcpServers(servers);
+}
+
+/**
+ * Auto-manage the episodic-memory MCP server entry in mcp.json.
+ * Always adds the entry (episodic memory is universally useful).
+ * Resolves MCP_CRON_DB_PATH from cron config's --db-path arg or default.
+ */
+export function syncEpisodicMcpServer(): void {
+  if (!isConfigured()) return;
+
+  const servers = loadMcpServers();
+
+  // Resolve cron DB path from cron config's --db-path arg, fall back to default
+  let cronDbPath = path.join(
+    process.env.HOME || process.env.USERPROFILE || "",
+    ".mcp-cron",
+    "results.db"
+  );
+  const cronConfig = servers["cron"];
+  if (cronConfig) {
+    const dbIdx = cronConfig.args.indexOf("--db-path");
+    if (dbIdx !== -1 && cronConfig.args[dbIdx + 1]) {
+      cronDbPath = cronConfig.args[dbIdx + 1];
+    }
+  }
+
+  const entryPoint = path.resolve(import.meta.dirname, "..", "dist", "mcp-episodic.js");
+  const desired: McpServerConfig = {
+    command: "node",
+    args: [entryPoint],
+    env: {
+      GOTO_DATA_DIR: DATA_DIR,
+      MCP_CRON_DB_PATH: cronDbPath,
+    },
+  };
+
+  if (JSON.stringify(servers[EPISODIC_SERVER_NAME]) === JSON.stringify(desired)) return;
+  servers[EPISODIC_SERVER_NAME] = desired;
   saveMcpServers(servers);
 }
 

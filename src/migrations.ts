@@ -1,6 +1,6 @@
-import { isConfigured, loadConfig, saveConfig, loadMcpServers, saveMcpServers, MCP_CONFIG_PATH, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, loadMcpServers, saveMcpServers, syncEpisodicMcpServer, MCP_CONFIG_PATH, type McpServerConfig } from "./config.js";
 
-export const CURRENT_CONFIG_VERSION = 2;
+export const CURRENT_CONFIG_VERSION = 3;
 
 type Migration = (servers: Record<string, McpServerConfig>) => void;
 
@@ -17,6 +17,9 @@ const migrations: Record<number, Migration> = {
     if (idx !== -1) {
       cron.args[idx] = MCP_CONFIG_PATH;
     }
+  },
+  3: () => {
+    syncEpisodicMcpServer();
   },
 };
 
