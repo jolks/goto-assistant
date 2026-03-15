@@ -106,9 +106,9 @@ export async function runOpenAI(
 ): Promise<void> {
   const { attachments, history, systemPromptOverride } = options || {};
 
-  // Disable tracing for non-default providers (gateways/proxies) where the
-  // OpenAI tracing API isn't available. Keep it enabled for direct OpenAI usage.
-  setTracingDisabled(!!config.openai.baseUrl);
+  // Disable tracing for known gateways (Kilo, Gemini) that don't support the
+  // OpenAI tracing API. Keep it enabled for direct OpenAI and compatible proxies.
+  setTracingDisabled(isChatCompletionsGateway(config.openai.baseUrl));
 
   // Use Chat Completions API for gateways that don't support the Responses API
   const useChatCompletions = isChatCompletionsGateway(config.openai.baseUrl);
