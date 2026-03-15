@@ -593,21 +593,12 @@ export function listRecentEpisodes(options?: {
           .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'")
           .get();
 
-        let sql: string;
-        if (tasksExist) {
-          sql = `
-            SELECT r.id, r.task_id, r.output, r.error, r.start_time, r.exit_code, t.name AS task_name
+        let sql = `
+            SELECT r.id, r.task_id, r.output, r.error, r.start_time, r.exit_code${tasksExist ? ", t.name AS task_name" : ""}
             FROM results r
-            LEFT JOIN tasks t ON r.task_id = t.id
+            ${tasksExist ? "LEFT JOIN tasks t ON r.task_id = t.id" : ""}
             WHERE 1=1
           `;
-        } else {
-          sql = `
-            SELECT r.id, r.task_id, r.output, r.error, r.start_time, r.exit_code
-            FROM results r
-            WHERE 1=1
-          `;
-        }
 
         const params: (string | number)[] = [];
 
