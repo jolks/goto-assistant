@@ -4,7 +4,7 @@
 
 # goto-assistant
 
-Lightweight, self-hosted AI assistant with first-class MCP support. Supports Claude, OpenAI, and OpenAI-compatible providers (Gemini, Groq, Ollama, etc.), with web and WhatsApp interfaces.
+Personal AI assistant that remembers past conversations, runs scheduled tasks, and works on both web and WhatsApp. Supports Claude, OpenAI, and OpenAI-compatible providers (Gemini, Groq, Ollama, etc.).
 
 ## Quick Start
 
