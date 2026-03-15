@@ -502,6 +502,7 @@ export function createServer(app: Express) {
           ws.send(JSON.stringify({ type: "done", conversationId }));
         }
       } catch (err) {
+        console.error("Chat error:", err instanceof Error ? err.message : err);
         const errorText = err instanceof Error ? err.message : "Unknown error";
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "error", text: errorText }));

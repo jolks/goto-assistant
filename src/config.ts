@@ -179,7 +179,10 @@ export function syncMessagingMcpServer(config?: Config): void {
 }
 
 /** Known gateways that only support Chat Completions (not the Responses API). */
-export const CHAT_COMPLETIONS_ONLY_GATEWAYS = ["api.kilo.ai"] as const;
+export const CHAT_COMPLETIONS_ONLY_GATEWAYS = [
+  "api.kilo.ai",
+  "generativelanguage.googleapis.com",
+] as const;
 
 /** Check if a base URL points to a known Chat Completions-only gateway. */
 export function isChatCompletionsGateway(baseUrl: string | undefined): boolean {

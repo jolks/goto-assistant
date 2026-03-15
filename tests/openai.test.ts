@@ -47,12 +47,13 @@ vi.mock("@openai/agents", async (importOriginal) => {
     shellTool: vi.fn().mockImplementation(() => ({ type: "shell", name: "shell" })),
     MaxTurnsExceededError: actual.MaxTurnsExceededError,
     setOpenAIAPI: vi.fn(),
+    setTracingDisabled: vi.fn(),
     OpenAIProvider: vi.fn().mockImplementation(() => ({})),
   };
 });
 
 const { runOpenAI, trimHistory } = await import("../src/agents/openai.js");
-const { MaxTurnsExceededError } = await import("@openai/agents");
+const { MaxTurnsExceededError, setTracingDisabled } = await import("@openai/agents");
 
 const config: Config = {
   provider: "openai",
@@ -193,6 +194,38 @@ describe("openai input construction", () => {
     const textBlock = content.find(c => c.type === "input_text") as { text: string };
     expect(textBlock.text).toContain("upload:file123");
     expect(textBlock.text).toContain("send this on whatsapp");
+  });
+});
+
+describe("gateway configuration", () => {
+  it("disables tracing when a gateway base URL is configured", async () => {
+    const gatewayConfig: Config = {
+      ...config,
+      openai: { ...config.openai, baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai" },
+    };
+    vi.mocked(setTracingDisabled).mockClear();
+    await runOpenAI("hi", gatewayConfig, mcpServers, vi.fn());
+    expect(setTracingDisabled).toHaveBeenCalledWith(true);
+  });
+
+  it("enables tracing when no base URL is set (direct OpenAI)", async () => {
+    const directConfig: Config = {
+      ...config,
+      openai: { ...config.openai, baseUrl: "" },
+    };
+    vi.mocked(setTracingDisabled).mockClear();
+    await runOpenAI("hi", directConfig, mcpServers, vi.fn());
+    expect(setTracingDisabled).toHaveBeenCalledWith(false);
+  });
+
+  it("enables tracing for non-gateway custom base URLs", async () => {
+    const proxyConfig: Config = {
+      ...config,
+      openai: { ...config.openai, baseUrl: "https://my-proxy.example.com/v1" },
+    };
+    vi.mocked(setTracingDisabled).mockClear();
+    await runOpenAI("hi", proxyConfig, mcpServers, vi.fn());
+    expect(setTracingDisabled).toHaveBeenCalledWith(false);
   });
 });
 

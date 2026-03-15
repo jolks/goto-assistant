@@ -1,12 +1,15 @@
-import { Agent, Runner, MCPServerStdio, shellTool, MaxTurnsExceededError, setOpenAIAPI, OpenAIProvider } from "@openai/agents";
+import { Agent, Runner, MCPServerStdio, shellTool, MaxTurnsExceededError, setOpenAIAPI, OpenAIProvider, setTracingDisabled } from "@openai/agents";
 import type { Shell, ShellAction, ShellResult, ShellOutputResult } from "@openai/agents";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import createDebug from "debug";
 import type { Config, McpServerConfig } from "../config.js";
 import { MAX_AGENT_TURNS, MAX_HISTORY_MESSAGES, RECENT_IMAGE_WINDOW, MEMORY_FILE_PATH, MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
 import { getUpload, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../uploads.js";
+
+const debug = createDebug("goto-assistant:openai");
 
 const execAsync = promisify(exec);
 
@@ -105,7 +108,14 @@ export async function runOpenAI(
 
   // Use Chat Completions API for gateways that don't support the Responses API
   const useChatCompletions = isChatCompletionsGateway(config.openai.baseUrl);
+
+  // Disable tracing for known gateways (Kilo, Gemini) that don't support the
+  // OpenAI tracing API. Keep it enabled for direct OpenAI and compatible proxies.
+  setTracingDisabled(useChatCompletions);
   setOpenAIAPI(useChatCompletions ? "chat_completions" : "responses");
+
+  debug("model=%s baseUrl=%s chatCompletions=%s envOverride=%s",
+    config.openai.model, config.openai.baseUrl, useChatCompletions, !!process.env.OPENAI_API_KEY);
 
   // Create a fresh provider + runner each call so config changes (API key, base
   // URL) take effect immediately. Both the default OpenAIProvider and default
