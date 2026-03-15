@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
 import { listChannels, sendMessage, UnknownChannelError, ChannelUnavailableError } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
@@ -19,6 +19,7 @@ function reloadServices(config?: Config): void {
   // Sync messaging MCP server entry in mcp.json (before cron restart so cron picks it up)
   // Note: WhatsApp channel registration happens inside whatsapp.ts on connection open/close
   syncMessagingMcpServer(cfg);
+  syncEpisodicMcpServer();
   restartCronServer().catch((err) =>
     console.error("Failed to restart mcp-cron:", err)
   );

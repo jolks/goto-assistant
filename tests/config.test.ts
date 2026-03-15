@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, isChatCompletionsGateway, MESSAGING_SERVER_NAME, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
+import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, isChatCompletionsGateway, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
 
 describe("config", () => {
@@ -333,6 +333,86 @@ describe("config", () => {
 
     it("returns false for localhost", () => {
       expect(isChatCompletionsGateway("http://localhost:11434/v1")).toBe(false);
+    });
+  });
+
+  describe("syncEpisodicMcpServer", () => {
+    it("adds episodic-memory entry to mcp.json", () => {
+      saveConfig(testConfig);
+      syncEpisodicMcpServer();
+      const servers = loadMcpServers();
+      expect(servers[EPISODIC_SERVER_NAME]).toBeDefined();
+      expect(servers[EPISODIC_SERVER_NAME].command).toBe("node");
+    });
+
+    it("entry point path exists on disk", () => {
+      saveConfig(testConfig);
+      syncEpisodicMcpServer();
+      const servers = loadMcpServers();
+      const entryPoint = servers[EPISODIC_SERVER_NAME].args[0];
+      expect(fs.existsSync(entryPoint)).toBe(true);
+    });
+
+    it("sets GOTO_DATA_DIR env var from DATA_DIR", () => {
+      saveConfig(testConfig);
+      syncEpisodicMcpServer();
+      const servers = loadMcpServers();
+      expect(servers[EPISODIC_SERVER_NAME].env?.GOTO_DATA_DIR).toBe(DATA_DIR);
+    });
+
+    it("sets MCP_CRON_DB_PATH from cron config --db-path arg", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--db-path", "/custom/results.db"] },
+      });
+      saveConfig(testConfig);
+      syncEpisodicMcpServer();
+      const servers = loadMcpServers();
+      expect(servers[EPISODIC_SERVER_NAME].env?.MCP_CRON_DB_PATH).toBe("/custom/results.db");
+    });
+
+    it("falls back to ~/.mcp-cron/results.db when cron has no --db-path", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron"] },
+      });
+      saveConfig(testConfig);
+      syncEpisodicMcpServer();
+      const servers = loadMcpServers();
+      expect(servers[EPISODIC_SERVER_NAME].env?.MCP_CRON_DB_PATH).toContain(".mcp-cron/results.db");
+    });
+
+    it("preserves other MCP servers in mcp.json", () => {
+      saveMcpServers({ memory: { command: "npx", args: ["-y", "server-memory"] } });
+      saveConfig(testConfig);
+      syncEpisodicMcpServer();
+      const servers = loadMcpServers();
+      expect(servers.memory).toBeDefined();
+      expect(servers[EPISODIC_SERVER_NAME]).toBeDefined();
+    });
+
+    it("skips saveMcpServers when entry is already up-to-date", () => {
+      saveConfig(testConfig);
+      syncEpisodicMcpServer(); // first call writes
+      const spy = vi.spyOn(fs, "writeFileSync");
+      syncEpisodicMcpServer(); // second call should skip
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it("updates entry when cron config --db-path changes", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--db-path", "/old/results.db"] },
+      });
+      saveConfig(testConfig);
+      syncEpisodicMcpServer();
+      let servers = loadMcpServers();
+      expect(servers[EPISODIC_SERVER_NAME].env?.MCP_CRON_DB_PATH).toBe("/old/results.db");
+
+      // Change cron --db-path
+      servers.cron = { command: "npx", args: ["-y", "mcp-cron", "--db-path", "/new/results.db"] };
+      saveMcpServers(servers);
+      syncEpisodicMcpServer();
+      servers = loadMcpServers();
+      expect(servers[EPISODIC_SERVER_NAME].env?.MCP_CRON_DB_PATH).toBe("/new/results.db");
     });
   });
 
