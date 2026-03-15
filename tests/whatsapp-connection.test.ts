@@ -81,7 +81,6 @@ describe("whatsapp connection lifecycle", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    rmSyncSpy.mockClear();
   });
 
   afterEach(async () => {
