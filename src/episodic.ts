@@ -76,6 +76,9 @@ export interface RecentEpisode {
 }
 
 // ── Paths ──────────────────────────────────────────────────────────────────
+// Evaluated once at import time. This module is only imported by mcp-episodic.ts
+// which runs as a separate child process with GOTO_DATA_DIR and MCP_CRON_DB_PATH
+// already set. Do not import this module from the main app process.
 
 const dataDir = process.env.GOTO_DATA_DIR || "";
 const sessionsDbPath = dataDir ? path.join(dataDir, "sessions.db") : "";
@@ -158,7 +161,7 @@ const FTS5_KEYWORDS = new Set(["AND", "OR", "NOT", "NEAR"]);
 
 function sanitizeQuery(query: string): string {
   // Strip FTS5 special characters, convert words to prefix searches
-  const cleaned = query.replace(/[^a-zA-Z0-9\s]/g, "").trim();
+  const cleaned = query.replace(/[^\p{L}\p{N}\s]/gu, "").trim();
   if (!cleaned) return '""'; // empty query matches nothing
   return cleaned
     .split(/\s+/)
@@ -399,6 +402,9 @@ export function searchEpisodes(
     }
   }
 
+  // When source="all", each branch fetches up to `limit` rows ranked by relevance,
+  // so we may have up to 2*limit before slicing. This is intentional — splitting
+  // the limit per source would give worse results when matches are unevenly distributed.
   return results.slice(0, limit);
 }
 
@@ -422,21 +428,22 @@ export function getConversationContext(
     let messages: Array<{ id: number; role: string; content: string; created_at: string }>;
 
     if (options?.around_message_id) {
-      // Get a window around the specified message
+      // Get a window around the specified message using position-based offset.
+      // ID arithmetic doesn't work because message IDs are shared across all
+      // conversations, so gaps between IDs within a single conversation are the norm.
       const half = Math.floor(limit / 2);
+      const pos = sessionsDb
+        .prepare("SELECT COUNT(*) AS pos FROM messages WHERE conversation_id = ? AND id <= ?")
+        .get(conversationId, options.around_message_id) as { pos: number } | undefined;
+      const offset = Math.max(0, (pos?.pos ?? 0) - 1 - half);
       messages = sessionsDb
         .prepare(
           `SELECT id, role, content, created_at FROM messages
-           WHERE conversation_id = ? AND id >= (? - ?) AND id <= (? + ?)
+           WHERE conversation_id = ?
            ORDER BY id ASC
-           LIMIT ?`
+           LIMIT ? OFFSET ?`
         )
-        .all(
-          conversationId,
-          options.around_message_id, half,
-          options.around_message_id, half,
-          limit
-        ) as typeof messages;
+        .all(conversationId, limit, offset) as typeof messages;
     } else {
       // Get the most recent N messages
       messages = sessionsDb
@@ -592,18 +599,20 @@ export function listRecentEpisodes(options?: {
             SELECT r.id, r.task_id, r.output, r.error, r.start_time, r.exit_code, t.name AS task_name
             FROM results r
             LEFT JOIN tasks t ON r.task_id = t.id
+            WHERE 1=1
           `;
         } else {
           sql = `
             SELECT r.id, r.task_id, r.output, r.error, r.start_time, r.exit_code
             FROM results r
+            WHERE 1=1
           `;
         }
 
         const params: (string | number)[] = [];
 
         if (options?.before) {
-          sql += " WHERE r.start_time < ?";
+          sql += " AND r.start_time < ?";
           params.push(options.before);
         }
 

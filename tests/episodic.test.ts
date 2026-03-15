@@ -314,6 +314,33 @@ describe("episodic", () => {
       expect(() => searchEpisodes("hello OR world NOT bad")).not.toThrow();
     });
 
+    it("handles Unicode/accented characters in queries without stripping them", () => {
+      const sdb = createSessionsDb();
+      sdb.prepare("INSERT INTO conversations (id, provider) VALUES (?, ?)").run("conv1", "claude");
+      sdb.prepare("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)").run("conv1", "user", "Déploiement réussi café");
+      sdb.close();
+
+      // Should not crash and should find the accented term
+      expect(() => searchEpisodes("réussi")).not.toThrow();
+      const results = searchEpisodes("réussi");
+      expect(results.length).toBe(1);
+      expect(results[0].snippet).toContain("réussi");
+    });
+
+    it("handles CJK (kanji) characters in queries without stripping them", () => {
+      const sdb = createSessionsDb();
+      sdb.prepare("INSERT INTO conversations (id, provider) VALUES (?, ?)").run("conv1", "claude");
+      // Space-separated so FTS5 unicode61 tokenizer creates individual tokens
+      // (unsegmented Japanese text becomes one giant token, a known FTS5 limitation)
+      sdb.prepare("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)").run("conv1", "user", "データベース バックアップ 完了");
+      sdb.close();
+
+      expect(() => searchEpisodes("バックアップ")).not.toThrow();
+      const results = searchEpisodes("バックアップ");
+      expect(results.length).toBe(1);
+      expect(results[0].snippet).toContain("バックアップ");
+    });
+
     it("returns empty array when no matches", () => {
       const sdb = createSessionsDb();
       sdb.prepare("INSERT INTO conversations (id, provider) VALUES (?, ?)").run("conv1", "claude");
@@ -382,6 +409,25 @@ describe("episodic", () => {
       expect(ctx.messages.length).toBeLessThanOrEqual(5);
       // Should include the target message
       expect(ctx.messages.some((m) => m.id === 10)).toBe(true);
+    });
+
+    it("around_message_id works correctly with ID gaps from interleaved conversations", () => {
+      const sdb = createSessionsDb();
+      sdb.prepare("INSERT INTO conversations (id, provider) VALUES (?, ?)").run("conv1", "claude");
+      sdb.prepare("INSERT INTO conversations (id, provider) VALUES (?, ?)").run("conv2", "claude");
+      // Interleave messages: conv1 gets odd IDs (1,3,5,7,9), conv2 gets even IDs (2,4,6,8,10)
+      for (let i = 1; i <= 10; i++) {
+        const convId = i % 2 === 1 ? "conv1" : "conv2";
+        sdb.prepare("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)").run(convId, "user", `Msg ${i} in ${convId}`);
+      }
+      sdb.close();
+
+      // conv1 has messages with IDs 1,3,5,7,9. Ask for window around ID 5 (3rd message in conv1).
+      const ctx = getConversationContext("conv1", { limit: 3, around_message_id: 5 });
+      expect(ctx.messages).toHaveLength(3);
+      // Should center around the 3rd message (ID 5), so IDs 3,5,7
+      const ids = ctx.messages.map((m) => m.id);
+      expect(ids).toEqual([3, 5, 7]);
     });
 
     it("returns empty messages array for unknown conversation_id", () => {
