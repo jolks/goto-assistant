@@ -306,6 +306,8 @@ export async function startWhatsApp(): Promise<void> {
       if (loggedOut) {
         connectionStatus = "disconnected";
         reconnectAttempts = 0;
+        // Clear stale auth state so next connect generates a fresh QR code
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
         console.log("WhatsApp logged out. Scan QR code again to reconnect.");
       } else if (!shouldReconnect) {
         connectionStatus = "disconnected";
