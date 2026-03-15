@@ -38,24 +38,25 @@ One command, no Docker, no framework — just MCP. Chat from the web or WhatsApp
     chat / ask
          │
          ▼
-   ┌───────────┐
-   │    AI     │
-   │ Assistant │
-   └──┬──┬──┬──┘
-      │  │  │  │
-      │  │  │  └── create / update / run /  ──▶ ┌───────┐
-      │  │  │      schedule / get results       │ Cron  │──── ┐
-      │  │  └───── read / write ────────────▶ ┌─┴───────┴┐    │
-      │  │                                    │  Files    │   │ AI tasks
-      │  └──────── remember / recall ───────▶ ┌┴──────────┴┐  │ w/ MCP
-      │                                       │  Memory    │◀─┘ access
-      │                                       ├────────────┤
-      └────────── do anything ──────────────▶ │  + your    │
-                                              │ MCP servers│
-                                              └────────────┘
+   ┌──────────────────┐
+   │    AI Assistant  │
+   └──┬──┬──┬──┬──┬──┘
+      │  │  │  │  │
+      │  │  │  │  └── create / update / run /  ──▶ ┌──────────────┐
+      │  │  │  │      schedule / get results       │     Cron     │──── ┐
+      │  │  │  └───── read / write ────────────▶   ├──────────────┤     │
+      │  │  │                                      │    Files     │   AI tasks
+      │  │  └──────── remember / recall ───────▶   ├──────────────┤   w/ MCP
+      │  │                                         │    Memory    │◀── access
+      │  └── recall conversations & task runs ──▶  ├──────────────┤
+      │                                            │   Episodic   │
+      │                                            ├──────────────┤
+      └────────── do anything ─────────────────▶   │  + your MCP  │
+                                                   │   servers    │
+                                                   └──────────────┘
 ```
 
-That one `npx` command gives you an AI assistant that can remember across conversations, manage your files, and run tasks on a schedule or on-demand — all through the standard [MCP protocol](https://modelcontextprotocol.io). Add any MCP server to extend it further.
+That one `npx` command gives you an AI assistant that can remember across conversations, search past interactions, manage your files, and run tasks on a schedule or on-demand — all through the standard [MCP protocol](https://modelcontextprotocol.io). Add any MCP server to extend it further.
 
 ## See it in action
 
