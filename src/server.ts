@@ -20,9 +20,10 @@ function reloadServices(config?: Config): void {
   // Note: WhatsApp channel registration happens inside whatsapp.ts on connection open/close
   syncMessagingMcpServer(cfg);
   syncEpisodicMcpServer();
-  syncBrokerMcpServer();
-  syncBrokerServersJson();
-  syncAgentMcpConfig();
+  const mcpServers = loadMcpServers();
+  syncBrokerMcpServer(mcpServers);
+  syncBrokerServersJson(mcpServers);
+  syncAgentMcpConfig(mcpServers);
   restartCronServer().catch((err) =>
     console.error("Failed to restart mcp-cron:", err)
   );
@@ -168,8 +169,9 @@ export function createApp(): Express {
     const appConfig = isConfigured() ? loadConfig() : undefined;
     const merged = unmaskMcpServers(mcpServers as Record<string, McpServerConfig>, existing, appConfig);
     saveMcpServers(merged);
-    syncBrokerServersJson();
-    syncAgentMcpConfig();
+    syncBrokerMcpServer(merged);
+    syncBrokerServersJson(merged);
+    syncAgentMcpConfig(merged);
     res.json({ ok: true });
   });
 

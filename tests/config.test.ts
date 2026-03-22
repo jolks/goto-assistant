@@ -506,6 +506,13 @@ describe("config", () => {
       expect(fs.existsSync(BROKER_DATA_DIR)).toBe(true);
     });
 
+    it("sets servers.json permissions to 0600 (may contain API keys)", () => {
+      saveMcpServers({ filesystem: { command: "npx", args: ["-y", "server-filesystem", "."], env: { API_KEY: "secret" } } });
+      syncBrokerServersJson();
+      const stats = fs.statSync(BROKER_SERVERS_PATH);
+      expect(stats.mode & 0o777).toBe(0o600);
+    });
+
     it("skips write when unchanged", () => {
       saveMcpServers({ filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] } });
       syncBrokerServersJson(); // first call writes
