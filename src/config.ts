@@ -223,53 +223,6 @@ export function syncEpisodicMcpServer(): void {
 }
 
 /**
- * Auto-manage the mcp-broker MCP server entry in mcp.json.
- * Always adds the entry (broker is universally useful for tool management).
- */
-export function syncBrokerMcpServer(servers?: Record<string, McpServerConfig>): void {
-  if (!isConfigured()) return;
-
-  if (!servers) servers = loadMcpServers();
-  const desired: McpServerConfig = {
-    command: "npx",
-    args: ["-y", "mcp-broker", "serve"],
-    env: { MCP_BROKER_HOME: BROKER_DATA_DIR },
-  };
-
-  if (JSON.stringify(servers[BROKER_SERVER_NAME]) === JSON.stringify(desired)) return;
-  servers[BROKER_SERVER_NAME] = desired;
-  saveMcpServers(servers);
-}
-
-/**
- * Sync user-added MCP servers to the broker's servers.json.
- * Filters out built-in servers and writes the rest to data/mcp-broker/servers.json.
- */
-export function syncBrokerServersJson(servers?: Record<string, McpServerConfig>): void {
-  const allServers = servers ?? loadMcpServers();
-  const userServers: Record<string, McpServerConfig> = {};
-  for (const [name, config] of Object.entries(allServers)) {
-    if (!BUILTIN_SERVER_NAMES.has(name)) {
-      userServers[name] = config;
-    }
-  }
-
-  // No user servers — skip writing (and clean up if exists)
-  if (Object.keys(userServers).length === 0) {
-    if (fs.existsSync(BROKER_SERVERS_PATH)) fs.unlinkSync(BROKER_SERVERS_PATH);
-    return;
-  }
-
-  const desired = JSON.stringify({ mcpServers: userServers }, null, 2);
-  if (fs.existsSync(BROKER_SERVERS_PATH) && fs.readFileSync(BROKER_SERVERS_PATH, "utf-8") === desired) return;
-
-  if (!fs.existsSync(BROKER_DATA_DIR)) {
-    fs.mkdirSync(BROKER_DATA_DIR, { recursive: true });
-  }
-  fs.writeFileSync(BROKER_SERVERS_PATH, desired, { mode: 0o600 });
-}
-
-/**
  * Return the MCP servers that should be passed to agents.
  * When broker is present: returns only built-in + broker servers (user servers go through broker).
  * When broker is absent: returns all servers (graceful fallback).
@@ -290,31 +243,62 @@ export function getAgentMcpServers(servers?: Record<string, McpServerConfig>): R
 export const AGENT_MCP_CONFIG_PATH = path.join(DATA_DIR, "mcp-agent.json");
 
 /**
- * Write agent-facing MCP servers to data/mcp-agent.json.
- * This file is used by mcp-cron instead of mcp.json so it also goes through the broker.
- * Also updates the cron entry's --mcp-config-path in mcp.json to point here.
+ * Sync all broker-related config: add broker to mcp.json, write user servers
+ * to broker's servers.json, write agent-facing config to mcp-agent.json,
+ * and update cron's --mcp-config-path to point to mcp-agent.json.
  */
-export function syncAgentMcpConfig(servers?: Record<string, McpServerConfig>): void {
+export function syncBrokerConfig(servers?: Record<string, McpServerConfig>): void {
+  if (!isConfigured()) return;
   if (!servers) servers = loadMcpServers();
 
-  // Update cron's --mcp-config-path in mcp.json to point to mcp-agent.json
+  // 1. Ensure broker entry exists in mcp.json
+  const desiredBroker: McpServerConfig = {
+    command: "npx",
+    args: ["-y", "mcp-broker", "serve"],
+    env: { MCP_BROKER_HOME: BROKER_DATA_DIR },
+  };
+  if (JSON.stringify(servers[BROKER_SERVER_NAME]) !== JSON.stringify(desiredBroker)) {
+    servers[BROKER_SERVER_NAME] = desiredBroker;
+    saveMcpServers(servers);
+  }
+
+  // 2. Write user-added servers to broker's servers.json
+  const userServers: Record<string, McpServerConfig> = {};
+  for (const [name, config] of Object.entries(servers)) {
+    if (!BUILTIN_SERVER_NAMES.has(name)) {
+      userServers[name] = config;
+    }
+  }
+  if (Object.keys(userServers).length === 0) {
+    try { fs.unlinkSync(BROKER_SERVERS_PATH); } catch { /* already absent */ }
+  } else {
+    const desiredJson = JSON.stringify({ mcpServers: userServers }, null, 2);
+    let current: string | undefined;
+    try { current = fs.readFileSync(BROKER_SERVERS_PATH, "utf-8"); } catch { /* missing */ }
+    if (current !== desiredJson) {
+      fs.mkdirSync(BROKER_DATA_DIR, { recursive: true });
+      fs.writeFileSync(BROKER_SERVERS_PATH, desiredJson, { mode: 0o600 });
+    }
+  }
+
+  // 3. Update cron's --mcp-config-path to point to mcp-agent.json
   const cronConfig = servers["cron"];
-  let cronUpdated = false;
   if (cronConfig) {
     const idx = cronConfig.args.indexOf("--mcp-config-path");
     if (idx !== -1 && cronConfig.args[idx + 1] && cronConfig.args[idx + 1] !== AGENT_MCP_CONFIG_PATH) {
       cronConfig.args[idx + 1] = AGENT_MCP_CONFIG_PATH;
       saveMcpServers(servers);
-      cronUpdated = true;
     }
   }
 
-  // Write agent-facing servers to mcp-agent.json
-  // Re-read from disk only if cron args were just updated (saveMcpServers was called)
-  const agentServers = getAgentMcpServers(cronUpdated ? undefined : servers);
-  const desired = JSON.stringify({ mcpServers: agentServers }, null, 2);
-  if (fs.existsSync(AGENT_MCP_CONFIG_PATH) && fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8") === desired) return;
-  fs.writeFileSync(AGENT_MCP_CONFIG_PATH, desired);
+  // 4. Write agent-facing servers to mcp-agent.json
+  const agentServers = getAgentMcpServers(servers);
+  const desiredAgent = JSON.stringify({ mcpServers: agentServers }, null, 2);
+  let currentAgent: string | undefined;
+  try { currentAgent = fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8"); } catch { /* missing */ }
+  if (currentAgent !== desiredAgent) {
+    fs.writeFileSync(AGENT_MCP_CONFIG_PATH, desiredAgent);
+  }
 }
 
 /** Known gateways that only support Chat Completions (not the Responses API). */

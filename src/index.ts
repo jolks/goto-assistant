@@ -1,5 +1,5 @@
 import { createApp, createServer } from "./server.js";
-import { isConfigured, loadConfig, loadMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerMcpServer, syncBrokerServersJson, syncAgentMcpConfig } from "./config.js";
+import { isConfigured, loadConfig, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerConfig } from "./config.js";
 import { runMigrations } from "./migrations.js";
 import { startCronServer, stopCronServer, stopCronSync } from "./cron.js";
 import { startWhatsApp, stopWhatsApp } from "./whatsapp.js";
@@ -20,10 +20,7 @@ server.listen(port, () => {
     // Channel registration happens inside whatsapp.ts on connection open
     syncMessagingMcpServer(config);
     syncEpisodicMcpServer();
-    const mcpServers = loadMcpServers();
-    syncBrokerMcpServer(mcpServers);
-    syncBrokerServersJson(mcpServers);
-    syncAgentMcpConfig(mcpServers);
+    syncBrokerConfig();
     startCronServer().catch((err) =>
       console.error("Failed to start mcp-cron:", err)
     );

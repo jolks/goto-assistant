@@ -152,8 +152,8 @@ let lastCronFingerprint: string | null = null;
 export async function restartCronServer(): Promise<void> {
   const servers = loadMcpServers();
   const cronConfig = servers["cron"];
-  // Include agent config content so cron restarts when broker filtering changes
-  const agentConfig = fs.existsSync(AGENT_MCP_CONFIG_PATH) ? fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8") : "";
+  let agentConfig = "";
+  try { agentConfig = fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8"); } catch { /* missing */ }
   const fingerprint = cronConfig ? JSON.stringify(cronConfig) + agentConfig : "";
   if (fingerprint === lastCronFingerprint && cronProc) return;
   lastCronFingerprint = fingerprint;

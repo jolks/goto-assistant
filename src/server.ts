@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerMcpServer, syncBrokerServersJson, syncAgentMcpConfig, getAgentMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerConfig, getAgentMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
 import { listChannels, sendMessage, UnknownChannelError, ChannelUnavailableError } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
@@ -20,10 +20,7 @@ function reloadServices(config?: Config): void {
   // Note: WhatsApp channel registration happens inside whatsapp.ts on connection open/close
   syncMessagingMcpServer(cfg);
   syncEpisodicMcpServer();
-  const mcpServers = loadMcpServers();
-  syncBrokerMcpServer(mcpServers);
-  syncBrokerServersJson(mcpServers);
-  syncAgentMcpConfig(mcpServers);
+  syncBrokerConfig();
   restartCronServer().catch((err) =>
     console.error("Failed to restart mcp-cron:", err)
   );
@@ -169,9 +166,7 @@ export function createApp(): Express {
     const appConfig = isConfigured() ? loadConfig() : undefined;
     const merged = unmaskMcpServers(mcpServers as Record<string, McpServerConfig>, existing, appConfig);
     saveMcpServers(merged);
-    syncBrokerMcpServer(merged);
-    syncBrokerServersJson(merged);
-    syncAgentMcpConfig(merged);
+    syncBrokerConfig(merged);
     res.json({ ok: true });
   });
 
