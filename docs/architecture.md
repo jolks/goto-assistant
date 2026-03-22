@@ -34,7 +34,7 @@ flowchart TD
 
     subgraph "MCP Servers (direct)"
         cron["mcp-cron<br/>(AI tasks + shell commands)"]
-        memory["memory"]
+        memory["memory (semantic)"]
         time_srv["time"]
         mcp_msg["mcp-messaging<br/>→ POST /api/messaging/*"]
         episodic["episodic-memory<br/>(FTS5 search)"]

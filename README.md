@@ -214,7 +214,7 @@ The assistant comes pre-configured with these MCP servers:
 
 | Server | Package | Capabilities |
 |--------|---------|-------------|
-| **memory** | [`@modelcontextprotocol/server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) | Persistent knowledge graph across conversations |
+| **memory** (semantic) | [`@modelcontextprotocol/server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) | Persistent knowledge graph across conversations |
 | **time** | [`mcp-server-time`](https://github.com/modelcontextprotocol/servers/tree/main/src/time) | Current time and timezone conversions |
 | **cron** | [`mcp-cron`](https://github.com/jolks/mcp-cron) | Schedule or run on-demand shell commands and AI prompts with access to MCP servers |
 | **messaging** | built-in | Send messages via connected platforms (WhatsApp, more coming) |

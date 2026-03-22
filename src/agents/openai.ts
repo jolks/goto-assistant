@@ -4,7 +4,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import createDebug from "debug";
 import type { Config, McpServerConfig } from "../config.js";
-import { MAX_AGENT_TURNS, MAX_HISTORY_MESSAGES, RECENT_IMAGE_WINDOW, MEMORY_FILE_PATH, MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
+import { MAX_AGENT_TURNS, MAX_HISTORY_MESSAGES, RECENT_IMAGE_WINDOW, MEMORY_FILE_PATH, SEMANTIC_MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
 import { getUpload, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../uploads.js";
@@ -138,7 +138,7 @@ export async function runOpenAI(
   const mcpServers: MCPServerStdio[] = [];
   for (const [name, server] of Object.entries(mcpServersConfig)) {
     const serverEnv: Record<string, string> = { ...env, ...server.env };
-    if (name === MEMORY_SERVER_NAME) {
+    if (name === SEMANTIC_MEMORY_SERVER_NAME) {
       serverEnv.MEMORY_FILE_PATH = MEMORY_FILE_PATH;
     }
     mcpServers.push(

@@ -24,7 +24,7 @@ export const DATA_DIR = process.env.GOTO_DATA_DIR || path.join(process.cwd(), "d
 export const CONFIG_PATH = path.join(DATA_DIR, "config.json");
 export const MCP_CONFIG_PATH = path.join(DATA_DIR, "mcp.json");
 export const MEMORY_FILE_PATH = path.join(DATA_DIR, "memory.json");
-export const MEMORY_SERVER_NAME = "memory";
+export const SEMANTIC_MEMORY_SERVER_NAME = "memory";
 export const MAX_AGENT_TURNS = 30;
 export const MAX_HISTORY_MESSAGES = 100;
 export const RECENT_IMAGE_WINDOW = 10;
@@ -153,7 +153,7 @@ export const BROKER_SERVER_NAME = "broker";
 export const TIME_SERVER_NAME = "time";
 const BROKER_DATA_DIR = path.join(DATA_DIR, "mcp-broker");
 const BROKER_SERVERS_PATH = path.join(BROKER_DATA_DIR, "servers.json");
-const BUILTIN_SERVER_NAMES = new Set([CRON_SERVER_NAME, MEMORY_SERVER_NAME, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, BROKER_SERVER_NAME, TIME_SERVER_NAME]);
+const BUILTIN_SERVER_NAMES = new Set([CRON_SERVER_NAME, SEMANTIC_MEMORY_SERVER_NAME, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, BROKER_SERVER_NAME, TIME_SERVER_NAME]);
 
 /**
  * Auto-manage the messaging MCP server entry in mcp.json.

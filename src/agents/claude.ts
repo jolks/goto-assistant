@@ -1,6 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Config, McpServerConfig } from "../config.js";
-import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
+import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, SEMANTIC_MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment } from "./router.js";
 import { extractFileId, formatUploadRef } from "../uploads.js";
 
@@ -35,7 +35,7 @@ export async function runClaude(
   const mcpServers: Record<string, McpServerConfig> = {};
   for (const [name, server] of Object.entries(mcpServersConfig)) {
     const serverEnv: Record<string, string> = { ...env, ...server.env };
-    if (name === MEMORY_SERVER_NAME) {
+    if (name === SEMANTIC_MEMORY_SERVER_NAME) {
       serverEnv.MEMORY_FILE_PATH = MEMORY_FILE_PATH;
     }
     mcpServers[name] = {
