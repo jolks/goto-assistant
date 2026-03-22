@@ -51,21 +51,6 @@ export interface ConversationContext {
   }>;
 }
 
-export interface TaskHistory {
-  task_id: string;
-  task_name: string | null;
-  description: string | null;
-  schedule: string | null;
-  results: Array<{
-    id: number;
-    output: string;
-    error: string;
-    exit_code: number;
-    start_time: string;
-    end_time: string;
-    duration: string;
-  }>;
-}
 
 export interface RecentEpisode {
   type: "conversation" | "task_result";
@@ -472,61 +457,6 @@ export function getConversationContext(
     };
   } finally {
     sessionsDb.close();
-  }
-}
-
-// ── Task history ───────────────────────────────────────────────────────────
-
-export function getTaskHistory(
-  taskId: string,
-  options?: { limit?: number }
-): TaskHistory {
-  const limit = options?.limit ?? 10;
-  const cronDb = openReadOnly(cronDbPath);
-  if (!cronDb) {
-    return { task_id: taskId, task_name: null, description: null, schedule: null, results: [] };
-  }
-
-  try {
-    // Check if tasks table exists
-    const tasksExist = cronDb
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'")
-      .get();
-
-    let taskMeta: { name: string; description: string; schedule: string } | undefined;
-    if (tasksExist) {
-      taskMeta = cronDb
-        .prepare("SELECT name, description, schedule FROM tasks WHERE id = ?")
-        .get(taskId) as typeof taskMeta;
-    }
-
-    const results = cronDb
-      .prepare(
-        `SELECT id, output, error, exit_code, start_time, end_time, duration
-         FROM results
-         WHERE task_id = ?
-         ORDER BY start_time DESC
-         LIMIT ?`
-      )
-      .all(taskId, limit) as Array<{
-      id: number;
-      output: string;
-      error: string;
-      exit_code: number;
-      start_time: string;
-      end_time: string;
-      duration: string;
-    }>;
-
-    return {
-      task_id: taskId,
-      task_name: taskMeta?.name ?? null,
-      description: taskMeta?.description ?? null,
-      schedule: taskMeta?.schedule ?? null,
-      results,
-    };
-  } finally {
-    cronDb.close();
   }
 }
 
