@@ -15,8 +15,8 @@ There are two config files you can read and modify using your filesystem tools:
 Default MCP servers have been configured:
 - **cron** (mcp-cron): Scheduled task execution
 - **memory** (@modelcontextprotocol/server-memory): Persistent knowledge graph
-- **filesystem** (@modelcontextprotocol/server-filesystem): File system access
 - **time** (mcp-server-time): Current time information
+- **broker** (mcp-broker): MCP gateway that dynamically discovers and routes tool calls to user-added servers via FTS5 search — auto-managed, do not remove
 
 **IMPORTANT — cron server must stay in sync with config.json:**
 The cron server in mcp.json has args that mirror the provider settings in config.json. When the provider, model, API key, or base URL changes, you MUST update both files:
@@ -26,6 +26,10 @@ The cron server in mcp.json has args that mirror the provider settings in config
 - \`env\` object: the key must be ANTHROPIC_API_KEY for claude, OPENAI_API_KEY for openai, or MCP_CRON_AI_API_KEY when using a base URL proxy. The value must be the API key for the active provider.
 
 When switching providers, ask the user for the new API key if one isn't already saved in config.json for that provider.
+
+**IMPORTANT — do NOT modify these auto-managed values:**
+- The \`--mcp-config-path\` arg in the cron server is auto-managed by the app (points to \`mcp-agent.json\`). Do not change it manually.
+- The **broker** and **episodic-memory** server entries are auto-managed. Do not remove or modify them.
 
 **SECURITY — Adding or updating MCP servers:**
 When a user asks to add or update an MCP server, ALWAYS warn them about the risks before proceeding:

@@ -1,6 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Config, McpServerConfig } from "../config.js";
-import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, MEMORY_SERVER_NAME } from "../config.js";
+import { MAX_AGENT_TURNS, MEMORY_FILE_PATH, SEMANTIC_MEMORY_SERVER_NAME } from "../config.js";
 import type { Attachment } from "./router.js";
 import { extractFileId, formatUploadRef } from "../uploads.js";
 
@@ -35,7 +35,7 @@ export async function runClaude(
   const mcpServers: Record<string, McpServerConfig> = {};
   for (const [name, server] of Object.entries(mcpServersConfig)) {
     const serverEnv: Record<string, string> = { ...env, ...server.env };
-    if (name === MEMORY_SERVER_NAME) {
+    if (name === SEMANTIC_MEMORY_SERVER_NAME) {
       serverEnv.MEMORY_FILE_PATH = MEMORY_FILE_PATH;
     }
     mcpServers[name] = {
@@ -51,7 +51,7 @@ export async function runClaude(
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     allowedTools: Object.keys(mcpServersConfig).map((name) => `mcp__${name}__*`),
-    systemPrompt: systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. Use them when appropriate. You can also send messages to the user via connected messaging channels (e.g. WhatsApp) using the messaging tools — send to self or to any phone number. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
+    systemPrompt: systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, scheduled tasks, and more. Use them when appropriate. You can also send messages to the user via connected messaging channels (e.g. WhatsApp) using the messaging tools — send to self or to any phone number. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
     env,
     maxTurns: MAX_AGENT_TURNS,
   };

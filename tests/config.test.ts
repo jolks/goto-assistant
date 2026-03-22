@@ -1,15 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
-import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, isChatCompletionsGateway, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
+import path from "node:path";
+import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerConfig, getAgentMcpServers, isChatCompletionsGateway, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, BROKER_SERVER_NAME, AGENT_MCP_CONFIG_PATH, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
+
+const BROKER_DATA_DIR = path.join(DATA_DIR, "mcp-broker");
+const BROKER_SERVERS_PATH = path.join(BROKER_DATA_DIR, "servers.json");
+
+function cleanupBrokerFiles() {
+  if (fs.existsSync(BROKER_SERVERS_PATH)) fs.unlinkSync(BROKER_SERVERS_PATH);
+  if (fs.existsSync(BROKER_DATA_DIR)) fs.rmdirSync(BROKER_DATA_DIR);
+  if (fs.existsSync(AGENT_MCP_CONFIG_PATH)) fs.unlinkSync(AGENT_MCP_CONFIG_PATH);
+}
 
 describe("config", () => {
   beforeEach(() => {
     cleanupConfigFiles();
+    cleanupBrokerFiles();
   });
 
   afterEach(() => {
     cleanupConfigFiles();
+    cleanupBrokerFiles();
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.PORT;
@@ -413,6 +425,193 @@ describe("config", () => {
       syncEpisodicMcpServer();
       servers = loadMcpServers();
       expect(servers[EPISODIC_SERVER_NAME].env?.MCP_CRON_DB_PATH).toBe("/new/results.db");
+    });
+  });
+
+  describe("syncBrokerConfig", () => {
+    it("adds broker entry to mcp.json", () => {
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      const servers = loadMcpServers();
+      expect(servers[BROKER_SERVER_NAME]).toBeDefined();
+      expect(servers[BROKER_SERVER_NAME].command).toBe("npx");
+      expect(servers[BROKER_SERVER_NAME].args).toEqual(["-y", "mcp-broker", "serve"]);
+      expect(servers[BROKER_SERVER_NAME].env?.MCP_BROKER_HOME).toBe(BROKER_DATA_DIR);
+    });
+
+    it("preserves other MCP servers", () => {
+      saveMcpServers({ memory: { command: "npx", args: ["-y", "server-memory"] } });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      const servers = loadMcpServers();
+      expect(servers.memory).toBeDefined();
+      expect(servers[BROKER_SERVER_NAME]).toBeDefined();
+    });
+
+    it("no-ops when not configured", () => {
+      syncBrokerConfig();
+      expect(fs.existsSync(MCP_CONFIG_PATH)).toBe(false);
+    });
+
+    it("writes only user-added servers to broker servers.json", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
+        memory: { command: "npx", args: ["-y", "server-memory"] },
+        filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+      });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      const content = JSON.parse(fs.readFileSync(BROKER_SERVERS_PATH, "utf-8"));
+      expect(content.mcpServers.filesystem).toBeDefined();
+      expect(content.mcpServers.github).toBeDefined();
+      expect(content.mcpServers.cron).toBeUndefined();
+      expect(content.mcpServers.memory).toBeUndefined();
+      expect(content.mcpServers[BROKER_SERVER_NAME]).toBeUndefined();
+    });
+
+    it("sets servers.json permissions to 0600 (may contain API keys)", () => {
+      saveMcpServers({ filesystem: { command: "npx", args: ["-y", "server-filesystem", "."], env: { API_KEY: "secret" } } });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      const stats = fs.statSync(BROKER_SERVERS_PATH);
+      expect(stats.mode & 0o777).toBe(0o600);
+    });
+
+    it("cleans up servers.json when all user servers removed", () => {
+      saveMcpServers({ filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] } });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      expect(fs.existsSync(BROKER_SERVERS_PATH)).toBe(true);
+
+      saveMcpServers({ cron: { command: "npx", args: ["-y", "mcp-cron"] } });
+      syncBrokerConfig();
+      expect(fs.existsSync(BROKER_SERVERS_PATH)).toBe(false);
+    });
+
+    it("writes agent-facing servers to mcp-agent.json", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
+        filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
+      });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      const content = JSON.parse(fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8"));
+      expect(content.mcpServers.cron).toBeDefined();
+      expect(content.mcpServers[BROKER_SERVER_NAME]).toBeDefined();
+      expect(content.mcpServers.filesystem).toBeUndefined();
+    });
+
+    it("updates cron --mcp-config-path in mcp.json", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
+      });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      const servers = loadMcpServers();
+      const idx = servers.cron.args.indexOf("--mcp-config-path");
+      expect(servers.cron.args[idx + 1]).toBe(AGENT_MCP_CONFIG_PATH);
+    });
+
+    it("updates cron args even when mcp-agent.json already has correct content", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
+      });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+
+      // Revert cron args (simulating setup page save)
+      const servers = loadMcpServers();
+      const idx = servers.cron.args.indexOf("--mcp-config-path");
+      servers.cron.args[idx + 1] = "./data/mcp.json";
+      saveMcpServers(servers);
+
+      syncBrokerConfig();
+      const updated = loadMcpServers();
+      const idx2 = updated.cron.args.indexOf("--mcp-config-path");
+      expect(updated.cron.args[idx2 + 1]).toBe(AGENT_MCP_CONFIG_PATH);
+    });
+
+    it("skips all writes when unchanged", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", AGENT_MCP_CONFIG_PATH] },
+      });
+      saveConfig(testConfig);
+      syncBrokerConfig(); // first call writes
+      const spy = vi.spyOn(fs, "writeFileSync");
+      syncBrokerConfig(); // second call should skip
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
+  describe("getAgentMcpServers", () => {
+    it("returns only built-in + broker when broker is present", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron"] },
+        memory: { command: "npx", args: ["-y", "server-memory"] },
+        [BROKER_SERVER_NAME]: { command: "npx", args: ["-y", "mcp-broker", "serve"] },
+        filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
+      });
+      const servers = getAgentMcpServers();
+      expect(servers.cron).toBeDefined();
+      expect(servers.memory).toBeDefined();
+      expect(servers[BROKER_SERVER_NAME]).toBeDefined();
+      expect(servers.filesystem).toBeUndefined();
+    });
+
+    it("returns all servers when broker is absent (fallback)", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron"] },
+        filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
+      });
+      const servers = getAgentMcpServers();
+      expect(servers.cron).toBeDefined();
+      expect(servers.filesystem).toBeDefined();
+    });
+  });
+
+  describe("broker integration — full sync flow", () => {
+    it("syncs servers through add, update, and remove lifecycle", () => {
+      saveConfig(testConfig);
+
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
+        memory: { command: "npx", args: ["-y", "server-memory"] },
+        filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+      });
+
+      // Initial sync: broker added, user servers extracted, agent config written
+      syncBrokerConfig();
+      let servers = loadMcpServers();
+      expect(servers[BROKER_SERVER_NAME]).toBeDefined();
+      let brokerConfig = JSON.parse(fs.readFileSync(BROKER_SERVERS_PATH, "utf-8"));
+      expect(Object.keys(brokerConfig.mcpServers).sort()).toEqual(["filesystem", "github"]);
+      let agentServers = getAgentMcpServers();
+      expect(Object.keys(agentServers).sort()).toEqual([BROKER_SERVER_NAME, "cron", "memory"]);
+
+      // Add a new user server
+      servers = loadMcpServers();
+      servers.slack = { command: "npx", args: ["-y", "server-slack"] };
+      saveMcpServers(servers);
+      syncBrokerConfig();
+      brokerConfig = JSON.parse(fs.readFileSync(BROKER_SERVERS_PATH, "utf-8"));
+      expect(Object.keys(brokerConfig.mcpServers).sort()).toEqual(["filesystem", "github", "slack"]);
+
+      // Remove all user servers
+      servers = loadMcpServers();
+      delete servers.filesystem;
+      delete servers.github;
+      delete servers.slack;
+      saveMcpServers(servers);
+      syncBrokerConfig();
+      expect(fs.existsSync(BROKER_SERVERS_PATH)).toBe(false);
+
+      agentServers = getAgentMcpServers();
+      expect(agentServers[BROKER_SERVER_NAME]).toBeDefined();
+      expect(agentServers.cron).toBeDefined();
+      expect(agentServers.memory).toBeDefined();
     });
   });
 
