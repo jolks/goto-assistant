@@ -188,7 +188,7 @@ describe.skipIf(!distExists)("mcp-episodic", () => {
       });
       const tools = (res.result as { tools: Array<{ name: string }> }).tools;
       const names = tools.map((t) => t.name);
-      expect(names).toEqual(["search_episodes", "get_conversation_context", "get_task_history", "list_recent_episodes"]);
+      expect(names).toEqual(["search_episodes", "get_conversation_context", "list_recent_episodes"]);
     } finally {
       proc.kill();
     }
@@ -247,27 +247,6 @@ describe.skipIf(!distExists)("mcp-episodic", () => {
       expect(ctx.conversation_id).toBe("conv-test-1");
       expect(ctx.title).toBe("Deployment discussion");
       expect(ctx.messages.length).toBe(2);
-    } finally {
-      proc.kill();
-    }
-  });
-
-  it("get_task_history returns results for a task", async () => {
-    const proc = spawnServer();
-    try {
-      await handshake(proc);
-      const res = await rpc(proc, {
-        jsonrpc: "2.0",
-        id: 10,
-        method: "tools/call",
-        params: { name: "get_task_history", arguments: { task_id: "task-test-1" } },
-      });
-      const content = (res.result as { content: Array<{ text: string }> }).content;
-      const history = JSON.parse(content[0].text);
-      expect(history.task_id).toBe("task-test-1");
-      expect(history.task_name).toBe("Nightly backup");
-      expect(history.results.length).toBe(1);
-      expect(history.results[0].exit_code).toBe(0);
     } finally {
       proc.kill();
     }

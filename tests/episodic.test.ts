@@ -15,7 +15,7 @@ process.env.MCP_CRON_DB_PATH = CRON_DB_PATH;
 
 // Dynamic import to pick up env vars — top-level await in ESM
 const episodic = await import("../src/episodic.js");
-const { ensureIndex, searchEpisodes, getConversationContext, getTaskHistory, listRecentEpisodes, closeIndexDb } = episodic;
+const { ensureIndex, searchEpisodes, getConversationContext, listRecentEpisodes, closeIndexDb } = episodic;
 
 function createSessionsDb(): Database.Database {
   const db = new Database(SESSIONS_DB_PATH);
@@ -436,56 +436,6 @@ describe("episodic", () => {
       expect(ctx.conversation_id).toBe("nonexistent");
       expect(ctx.messages).toEqual([]);
       expect(ctx.title).toBeNull();
-    });
-  });
-
-  describe("getTaskHistory", () => {
-    it("returns task metadata + execution results", () => {
-      const cdb = createCronDb();
-      cdb.prepare("INSERT INTO tasks (id, name, description, type, schedule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run("task1", "Daily backup", "Backs up the database", "shell_command", "0 0 * * *", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z");
-      cdb.prepare("INSERT INTO results (task_id, output, exit_code, start_time, end_time, duration) VALUES (?, ?, ?, ?, ?, ?)").run("task1", "OK", 0, "2026-03-14T00:00:00Z", "2026-03-14T00:01:00Z", "1m0s");
-      cdb.close();
-
-      const history = getTaskHistory("task1");
-      expect(history.task_id).toBe("task1");
-      expect(history.task_name).toBe("Daily backup");
-      expect(history.description).toBe("Backs up the database");
-      expect(history.schedule).toBe("0 0 * * *");
-      expect(history.results).toHaveLength(1);
-      expect(history.results[0].exit_code).toBe(0);
-      expect(history.results[0].output).toBe("OK");
-    });
-
-    it("results ordered by start_time DESC (most recent first)", () => {
-      const cdb = createCronDb();
-      cdb.prepare("INSERT INTO tasks (id, name, type, schedule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run("task1", "Backup", "shell_command", "0 0 * * *", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z");
-      cdb.prepare("INSERT INTO results (task_id, output, start_time, end_time) VALUES (?, ?, ?, ?)").run("task1", "First run", "2026-03-01T00:00:00Z", "2026-03-01T00:01:00Z");
-      cdb.prepare("INSERT INTO results (task_id, output, start_time, end_time) VALUES (?, ?, ?, ?)").run("task1", "Second run", "2026-03-14T00:00:00Z", "2026-03-14T00:01:00Z");
-      cdb.close();
-
-      const history = getTaskHistory("task1");
-      expect(history.results[0].output).toBe("Second run");
-      expect(history.results[1].output).toBe("First run");
-    });
-
-    it("respects limit parameter", () => {
-      const cdb = createCronDb();
-      cdb.prepare("INSERT INTO tasks (id, name, type, schedule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run("task1", "Backup", "shell_command", "0 0 * * *", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z");
-      for (let i = 0; i < 10; i++) {
-        cdb.prepare("INSERT INTO results (task_id, output, start_time, end_time) VALUES (?, ?, ?, ?)").run("task1", `Run ${i}`, `2026-03-${String(i + 1).padStart(2, "0")}T00:00:00Z`, `2026-03-${String(i + 1).padStart(2, "0")}T00:01:00Z`);
-      }
-      cdb.close();
-
-      const history = getTaskHistory("task1", { limit: 3 });
-      expect(history.results).toHaveLength(3);
-    });
-
-    it("returns empty results for unknown task_id", () => {
-      createCronDb().close();
-      const history = getTaskHistory("nonexistent");
-      expect(history.task_id).toBe("nonexistent");
-      expect(history.task_name).toBeNull();
-      expect(history.results).toEqual([]);
     });
   });
 

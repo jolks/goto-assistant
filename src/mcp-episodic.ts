@@ -8,7 +8,6 @@ import { MCP_PROTOCOL_VERSION } from "./config.js";
 import {
   searchEpisodes,
   getConversationContext,
-  getTaskHistory,
   listRecentEpisodes,
 } from "./episodic.js";
 
@@ -64,18 +63,6 @@ const TOOLS = [
     },
   },
   {
-    name: "get_task_history",
-    description: "Retrieve execution history for a scheduled task. Shows recent runs with output, errors, and exit codes.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        task_id: { type: "string", description: "Task ID from search results" },
-        limit: { type: "number", description: "Maximum results to return (default: 10)" },
-      },
-      required: ["task_id"],
-    },
-  },
-  {
     name: "list_recent_episodes",
     description: "Browse recent conversations and task results chronologically. Use for discovering recent activity without a specific search query.",
     inputSchema: {
@@ -121,19 +108,6 @@ function handleToolCall(id: number | string, name: string, args: Record<string, 
         around_message_id: typeof args.around_message_id === "number" ? args.around_message_id : undefined,
       });
       respond(makeResult(id, [{ type: "text", text: JSON.stringify(context) }]));
-      return;
-    }
-
-    if (name === "get_task_history") {
-      const taskId = args.task_id as string;
-      if (!taskId || typeof taskId !== "string") {
-        respond(makeResult(id, [{ type: "text", text: "Error: task_id is required and must be a string" }], true));
-        return;
-      }
-      const history = getTaskHistory(taskId, {
-        limit: typeof args.limit === "number" ? args.limit : undefined,
-      });
-      respond(makeResult(id, [{ type: "text", text: JSON.stringify(history) }]));
       return;
     }
 
