@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { loadMcpServers } from "./config.js";
+import fs from "node:fs";
+import { loadMcpServers, AGENT_MCP_CONFIG_PATH } from "./config.js";
 
 let cronProc: ChildProcess | null = null;
 // IDs 1-99 reserved for startup handshake (currently: 1=initialize, 2=list_tasks).
@@ -151,7 +152,9 @@ let lastCronFingerprint: string | null = null;
 export async function restartCronServer(): Promise<void> {
   const servers = loadMcpServers();
   const cronConfig = servers["cron"];
-  const fingerprint = cronConfig ? JSON.stringify(cronConfig) : "";
+  // Include agent config content so cron restarts when broker filtering changes
+  const agentConfig = fs.existsSync(AGENT_MCP_CONFIG_PATH) ? fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8") : "";
+  const fingerprint = cronConfig ? JSON.stringify(cronConfig) + agentConfig : "";
   if (fingerprint === lastCronFingerprint && cronProc) return;
   lastCronFingerprint = fingerprint;
   await stopCronServer();

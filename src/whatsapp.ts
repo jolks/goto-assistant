@@ -10,7 +10,7 @@ import makeWASocket, {
   type proto,
 } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
-import { DATA_DIR, loadConfig, loadMcpServers } from "./config.js";
+import { DATA_DIR, loadConfig, getAgentMcpServers } from "./config.js";
 import fs from "node:fs";
 import { registerChannel, unregisterChannel, ChannelUnavailableError, type SendMediaOptions } from "./messaging.js";
 import { routeMessage } from "./agents/router.js";
@@ -125,7 +125,7 @@ async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
   enqueueChat(chatId, async () => {
     try {
       const config = loadConfig();
-      const mcpServers = loadMcpServers();
+      const mcpServers = getAgentMcpServers();
 
       // Extract text content
       const videoMessage = msg.message?.videoMessage;

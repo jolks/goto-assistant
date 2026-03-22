@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerMcpServer, syncBrokerServersJson, syncAgentMcpConfig, getAgentMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
 import { listChannels, sendMessage, UnknownChannelError, ChannelUnavailableError } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
@@ -20,6 +20,9 @@ function reloadServices(config?: Config): void {
   // Note: WhatsApp channel registration happens inside whatsapp.ts on connection open/close
   syncMessagingMcpServer(cfg);
   syncEpisodicMcpServer();
+  syncBrokerMcpServer();
+  syncBrokerServersJson();
+  syncAgentMcpConfig();
   restartCronServer().catch((err) =>
     console.error("Failed to restart mcp-cron:", err)
   );
@@ -165,6 +168,8 @@ export function createApp(): Express {
     const appConfig = isConfigured() ? loadConfig() : undefined;
     const merged = unmaskMcpServers(mcpServers as Record<string, McpServerConfig>, existing, appConfig);
     saveMcpServers(merged);
+    syncBrokerServersJson();
+    syncAgentMcpConfig();
     res.json({ ok: true });
   });
 
@@ -404,7 +409,7 @@ export function createServer(app: Express) {
       }
 
       const config = loadConfig();
-      const mcpServers = loadMcpServers();
+      const mcpServers = getAgentMcpServers();
 
       // Determine conversation mode: 0 = chat, 1 = setup, 2 = task
       const mode = msg.taskMode ? 2 : msg.setupMode ? 1 : 0;
