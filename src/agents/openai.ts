@@ -159,7 +159,7 @@ export async function runOpenAI(
     const agent = new Agent({
       name: "goto-assistant",
       instructions:
-        systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, filesystem, browser automation, and scheduled tasks. You also have a shell tool to execute commands on the host machine. You can also send messages to the user via connected messaging channels (e.g. WhatsApp) using the messaging tools — send to self or to any phone number. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
+        systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, scheduled tasks, and more. You also have a shell tool to execute commands on the host machine. You can also send messages to the user via connected messaging channels (e.g. WhatsApp) using the messaging tools — send to self or to any phone number. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
       model: config.openai.model,
       mcpServers,
       // shellTool is a hosted tool — only available with the Responses API

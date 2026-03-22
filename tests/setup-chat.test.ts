@@ -200,7 +200,6 @@ describe("setup-chat", () => {
       const servers = buildDefaultMcpServers("claude", "sk-ant-test", "claude-sonnet-4-5-20250929", "");
       expect(servers).toHaveProperty("cron");
       expect(servers).toHaveProperty("memory");
-      expect(servers).toHaveProperty("filesystem");
       expect(servers).toHaveProperty("time");
     });
 
@@ -230,11 +229,6 @@ describe("setup-chat", () => {
     it("memory server has correct args", () => {
       const servers = buildDefaultMcpServers("claude", "sk-test", "claude-sonnet-4-5-20250929", "");
       expect(servers.memory.args).toEqual(["-y", "@modelcontextprotocol/server-memory"]);
-    });
-
-    it("filesystem server has correct args", () => {
-      const servers = buildDefaultMcpServers("claude", "sk-test", "claude-sonnet-4-5-20250929", "");
-      expect(servers.filesystem.args).toEqual(["-y", "@modelcontextprotocol/server-filesystem", "."]);
     });
 
     it("time server has correct command and args", () => {
@@ -369,7 +363,6 @@ describe("setup-chat", () => {
       const servers = [
         { name: "cron", command: "npx", args: "-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929", env: {} },
         { name: "memory", command: "npx", args: "-y @modelcontextprotocol/server-memory", env: {} },
-        { name: "filesystem", command: "npx", args: "-y @modelcontextprotocol/server-filesystem .", env: {} },
         { name: "time", command: "uvx", args: "mcp-server-time", env: {} },
       ];
       renderServers(servers);

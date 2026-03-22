@@ -131,7 +131,7 @@ describe("setup page", () => {
       expect(result).toHaveLength(defaultServers.length);
       expect(result[0].name).toBe("cron");
       expect(result[1].name).toBe("memory");
-      expect(result[2].name).toBe("filesystem");
+      expect(result[2].name).toBe("time");
     });
   });
 

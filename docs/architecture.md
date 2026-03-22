@@ -32,13 +32,17 @@ flowchart TD
         sessions["sessions.ts"]
     end
 
-    subgraph "MCP Servers"
-        memory["memory"]
-        filesystem["filesystem"]
-        other_mcp["..."]
+    subgraph "MCP Servers (direct)"
         cron["mcp-cron<br/>(AI tasks + shell commands)"]
+        memory["memory"]
+        time_srv["time"]
         mcp_msg["mcp-messaging<br/>→ POST /api/messaging/*"]
         episodic["episodic-memory<br/>(FTS5 search)"]
+    end
+
+    subgraph "MCP Servers (via broker)"
+        broker["mcp-broker<br/>(FTS5 gateway)"]
+        other_mcp["user-added servers..."]
     end
 
     db[("SQLite DB<br/>data/sessions.db")]
@@ -57,9 +61,10 @@ flowchart TD
     messaging_api --> ch_wa
     ch_wa -- "sendWhatsAppMessage" --> wa
 
-    claude --> memory & filesystem & other_mcp & cron & mcp_msg & episodic
-    openai --> memory & filesystem & other_mcp & cron & mcp_msg & episodic
-    cron --> memory & filesystem & other_mcp
+    claude --> cron & memory & time_srv & mcp_msg & episodic & broker
+    openai --> cron & memory & time_srv & mcp_msg & episodic & broker
+    cron --> memory & time_srv & mcp_msg & episodic & broker
+    broker -- "search_tools / call_tools" --> other_mcp
 
     mcp_msg -- "proxies to" --> messaging_api
 

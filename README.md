@@ -42,21 +42,22 @@ One command, no Docker, no framework — just MCP. Chat from the web or WhatsApp
    │    AI Assistant  │
    └──┬──┬──┬──┬──┬──┘
       │  │  │  │  │
-      │  │  │  │  └── create / update / run /  ──▶ ┌──────────────┐
-      │  │  │  │      schedule / get results       │     Cron     │──── ┐
-      │  │  │  └───── read / write ────────────▶   ├──────────────┤     │
-      │  │  │                                      │    Files     │   AI tasks
-      │  │  └──────── remember / recall ───────▶   ├──────────────┤   w/ MCP
-      │  │                                         │    Memory    │◀── access
-      │  └── recall conversations & task runs ──▶  ├──────────────┤
-      │                                            │   Episodic   │
+      │  │  │  │  │      create / update / run /   ┌──────────────┐
+      │  │  │  │  └───── schedule / get results ─▶ │     Cron     │──── ┐
+      │  │  │  │                                   ├──────────────┤     │
+      │  │  │  └───── remember / recall ────────▶  │    Memory    │   AI tasks
+      │  │  │                                      ├──────────────┤   w/ MCP
+      │  │  └── recall conversations & task runs ▶ │   Episodic   │◀── access
+      │  │                                         ├──────────────┤
+      │  └────────── current time ─────────────▶   │     Time     │
       │                                            ├──────────────┤
-      └────────── do anything ─────────────────▶   │  + your MCP  │
+      └────────── do anything ─────────────────▶   │    Broker    │
+                   (search & call tools)           │  ↕ your MCP  │
                                                    │   servers    │
                                                    └──────────────┘
 ```
 
-That one `npx` command gives you an AI assistant that can remember across conversations, search past interactions, manage your files, and run tasks on a schedule or on-demand — all through the standard [MCP protocol](https://modelcontextprotocol.io). Add any MCP server to extend it further.
+That one `npx` command gives you an AI assistant that can remember across conversations, search past interactions, and run tasks on a schedule or on-demand — all through the standard [MCP protocol](https://modelcontextprotocol.io). Add any MCP server to extend it further — the built-in broker dynamically discovers and routes your tools.
 
 ## See it in action
 
@@ -174,7 +175,7 @@ Messages go through the same AI pipeline as the web chat. The agent only respond
 
 ## Architecture
 
-Browser and WhatsApp clients connect to `server.ts` (WebSocket + REST), which routes messages through `router.ts` to the Claude or OpenAI agent SDK. Agents access MCP servers (memory, filesystem, cron, messaging, etc.) for extended capabilities. Messaging flows through a channel registry — the `mcp-messaging` MCP server proxies tool calls to `POST /api/messaging/send`, which routes to the appropriate channel (WhatsApp, etc.). The `episodic-memory` MCP server provides full-text search over past conversations and task results using SQLite FTS5, enabling the agent to recall prior interactions.
+Browser and WhatsApp clients connect to `server.ts` (WebSocket + REST), which routes messages through `router.ts` to the Claude or OpenAI agent SDK. Agents access MCP servers for extended capabilities — user-added servers are accessed through `mcp-broker`, an FTS5-powered gateway that dynamically discovers and routes tool calls, while built-in servers (cron, memory, messaging, episodic-memory) connect directly. Messaging flows through a channel registry — the `mcp-messaging` MCP server proxies tool calls to `POST /api/messaging/send`, which routes to the appropriate channel (WhatsApp, etc.). The `episodic-memory` MCP server provides full-text search over past conversations and task results using SQLite FTS5, enabling the agent to recall prior interactions.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture diagram.
 
@@ -214,10 +215,10 @@ The assistant comes pre-configured with these MCP servers:
 | Server | Package | Capabilities |
 |--------|---------|-------------|
 | **memory** | [`@modelcontextprotocol/server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) | Persistent knowledge graph across conversations |
-| **filesystem** | [`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) | Read, write, and manage local files |
 | **time** | [`mcp-server-time`](https://github.com/modelcontextprotocol/servers/tree/main/src/time) | Current time and timezone conversions |
 | **cron** | [`mcp-cron`](https://github.com/jolks/mcp-cron) | Schedule or run on-demand shell commands and AI prompts with access to MCP servers |
 | **messaging** | built-in | Send messages via connected platforms (WhatsApp, more coming) |
 | **episodic-memory** | built-in | Full-text search over past conversations and task results |
+| **broker** | [`mcp-broker`](https://github.com/jolks/mcp-broker) | MCP gateway — dynamically discovers and routes tool calls to user-added servers via FTS5 search |
 
 Add your own through the setup page — either via the form or by asking the setup wizard AI chat — or by editing `data/mcp.json` directly. Any MCP server that supports stdio transport will work — browse the [MCP server directory](https://github.com/modelcontextprotocol/servers) for more.

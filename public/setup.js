@@ -4,7 +4,6 @@
 var defaultServers = [
   { name: 'cron', command: 'npx', args: DEFAULT_CRON_ARGS, env: {} },
   { name: 'memory', command: 'npx', args: '-y @modelcontextprotocol/server-memory', env: {} },
-  { name: 'filesystem', command: 'npx', args: '-y @modelcontextprotocol/server-filesystem .', env: {} },
   { name: 'time', command: 'uvx', args: 'mcp-server-time', env: {} },
 ];
 

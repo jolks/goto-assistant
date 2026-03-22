@@ -146,12 +146,14 @@ export function getMaskedConfig(config: Config): Config {
   };
 }
 
+export const CRON_SERVER_NAME = "cron";
 export const MESSAGING_SERVER_NAME = "messaging";
 export const EPISODIC_SERVER_NAME = "episodic-memory";
 export const BROKER_SERVER_NAME = "broker";
+export const TIME_SERVER_NAME = "time";
 const BROKER_DATA_DIR = path.join(DATA_DIR, "mcp-broker");
 const BROKER_SERVERS_PATH = path.join(BROKER_DATA_DIR, "servers.json");
-const BUILTIN_SERVER_NAMES = new Set(["cron", MEMORY_SERVER_NAME, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, BROKER_SERVER_NAME]);
+const BUILTIN_SERVER_NAMES = new Set([CRON_SERVER_NAME, MEMORY_SERVER_NAME, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, BROKER_SERVER_NAME, TIME_SERVER_NAME]);
 
 /**
  * Auto-manage the messaging MCP server entry in mcp.json.
@@ -199,7 +201,7 @@ export function syncEpisodicMcpServer(): void {
     ".mcp-cron",
     "results.db"
   );
-  const cronConfig = servers["cron"];
+  const cronConfig = servers[CRON_SERVER_NAME];
   if (cronConfig) {
     const dbIdx = cronConfig.args.indexOf("--db-path");
     if (dbIdx !== -1 && cronConfig.args[dbIdx + 1]) {
@@ -282,7 +284,7 @@ export function syncBrokerConfig(servers?: Record<string, McpServerConfig>): voi
   }
 
   // 3. Update cron's --mcp-config-path to point to mcp-agent.json
-  const cronConfig = servers["cron"];
+  const cronConfig = servers[CRON_SERVER_NAME];
   if (cronConfig) {
     const idx = cronConfig.args.indexOf("--mcp-config-path");
     if (idx !== -1 && cronConfig.args[idx + 1] && cronConfig.args[idx + 1] !== AGENT_MCP_CONFIG_PATH) {
