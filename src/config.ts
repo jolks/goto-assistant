@@ -303,16 +303,39 @@ export function syncBrokerConfig(servers?: Record<string, McpServerConfig>): voi
   }
 }
 
-/** Known gateways that only support Chat Completions (not the Responses API). */
-export const CHAT_COMPLETIONS_ONLY_GATEWAYS = [
-  "api.kilo.ai",
-  "generativelanguage.googleapis.com",
-] as const;
+/**
+ * Hostnames and hostname suffixes identifying servers known to support the
+ * OpenAI Responses API. All other custom base URLs default to the Chat
+ * Completions API, which is the universally supported format across
+ * third-party proxies (LiteLLM, Ollama, vLLM, Groq, etc.) and translates
+ * correctly to non-OpenAI backends like Anthropic.
+ */
+const responsesAPIHosts = ["api.openai.com"] as const;
 
-/** Check if a base URL points to a known Chat Completions-only gateway. */
-export function isChatCompletionsGateway(baseUrl: string | undefined): boolean {
-  if (!baseUrl) return false;
-  return CHAT_COMPLETIONS_ONLY_GATEWAYS.some((gw) => baseUrl.includes(gw));
+/**
+ * Hostname suffixes for wildcard matching (e.g., ".openai.azure.com" matches
+ * "myresource.openai.azure.com"). The leading dot prevents false positives
+ * like "fakeopenai.azure.com".
+ */
+const responsesAPIHostSuffixes = [".openai.azure.com"] as const;
+
+/**
+ * Returns true if baseUrl points to a server known to support the OpenAI
+ * Responses API. When baseUrl is undefined/empty (direct OpenAI default),
+ * matches a known host exactly, or matches a known hostname suffix (e.g.,
+ * Azure OpenAI), this returns true.
+ */
+export function isResponsesAPICapable(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return true;
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    return (
+      responsesAPIHosts.some((host) => hostname === host) ||
+      responsesAPIHostSuffixes.some((suffix) => hostname.endsWith(suffix))
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function getMaskedMcpServers(

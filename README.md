@@ -206,7 +206,7 @@ App configuration is stored in `data/config.json` (created on first setup). MCP 
 - `ANTHROPIC_API_KEY` — API key for Claude
 - `OPENAI_API_KEY` — API key for OpenAI (also used for OpenAI-compatible providers)
 
-For OpenAI-compatible providers, set the base URL in the setup page (e.g. `https://generativelanguage.googleapis.com/v1beta/openai` for Gemini). The app auto-detects known gateways and switches to the Chat Completions API when needed.
+For OpenAI-compatible providers, set the base URL in the setup page (e.g. `https://generativelanguage.googleapis.com/v1beta/openai` for Gemini). The app defaults to the Chat Completions API for all third-party base URLs; the Responses API is only used for direct OpenAI and Azure OpenAI endpoints.
 
 ## MCP Servers
 
