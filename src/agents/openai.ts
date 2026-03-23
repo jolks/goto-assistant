@@ -4,7 +4,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import createDebug from "debug";
 import type { Config, McpServerConfig } from "../config.js";
-import { MAX_AGENT_TURNS, MAX_HISTORY_MESSAGES, RECENT_IMAGE_WINDOW, MEMORY_FILE_PATH, SEMANTIC_MEMORY_SERVER_NAME, isChatCompletionsGateway } from "../config.js";
+import { MAX_AGENT_TURNS, MAX_HISTORY_MESSAGES, RECENT_IMAGE_WINDOW, MEMORY_FILE_PATH, SEMANTIC_MEMORY_SERVER_NAME, isResponsesAPICapable } from "../config.js";
 import type { Attachment, HistoryMessage } from "./router.js";
 import { parseMessageContent } from "../sessions.js";
 import { getUpload, ALLOWED_IMAGE_TYPES, extractFileId, formatUploadRef } from "../uploads.js";
@@ -106,8 +106,9 @@ export async function runOpenAI(
 ): Promise<void> {
   const { attachments, history, systemPromptOverride } = options || {};
 
-  // Use Chat Completions API for gateways that don't support the Responses API
-  const useChatCompletions = isChatCompletionsGateway(config.openai.baseUrl);
+  // Use Chat Completions API for any non-OpenAI base URL (third-party proxies
+  // universally support Chat Completions but may mistranslate the Responses API)
+  const useChatCompletions = !isResponsesAPICapable(config.openai.baseUrl);
 
   // Disable tracing for known gateways (Kilo, Gemini) that don't support the
   // OpenAI tracing API. Keep it enabled for direct OpenAI and compatible proxies.

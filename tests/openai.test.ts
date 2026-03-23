@@ -218,13 +218,23 @@ describe("gateway configuration", () => {
     expect(setTracingDisabled).toHaveBeenCalledWith(false);
   });
 
-  it("enables tracing for non-gateway custom base URLs", async () => {
+  it("disables tracing for non-OpenAI custom base URLs", async () => {
     const proxyConfig: Config = {
       ...config,
       openai: { ...config.openai, baseUrl: "https://my-proxy.example.com/v1" },
     };
     vi.mocked(setTracingDisabled).mockClear();
     await runOpenAI("hi", proxyConfig, mcpServers, vi.fn());
+    expect(setTracingDisabled).toHaveBeenCalledWith(true);
+  });
+
+  it("enables tracing for api.openai.com base URL", async () => {
+    const openaiConfig: Config = {
+      ...config,
+      openai: { ...config.openai, baseUrl: "https://api.openai.com/v1" },
+    };
+    vi.mocked(setTracingDisabled).mockClear();
+    await runOpenAI("hi", openaiConfig, mcpServers, vi.fn());
     expect(setTracingDisabled).toHaveBeenCalledWith(false);
   });
 });

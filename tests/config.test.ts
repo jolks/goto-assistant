@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerConfig, getAgentMcpServers, isChatCompletionsGateway, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, BROKER_SERVER_NAME, AGENT_MCP_CONFIG_PATH, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
+import { isConfigured, loadConfig, saveConfig, maskApiKey, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, isMaskedValue, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerConfig, getAgentMcpServers, isResponsesAPICapable, MESSAGING_SERVER_NAME, EPISODIC_SERVER_NAME, BROKER_SERVER_NAME, AGENT_MCP_CONFIG_PATH, DATA_DIR, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "../src/config.js";
 import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
 
 const BROKER_DATA_DIR = path.join(DATA_DIR, "mcp-broker");
@@ -326,25 +326,29 @@ describe("config", () => {
     });
   });
 
-  describe("isChatCompletionsGateway", () => {
-    it("returns false for undefined", () => {
-      expect(isChatCompletionsGateway(undefined)).toBe(false);
+  describe("isResponsesAPICapable", () => {
+    it("returns true for undefined (direct OpenAI default)", () => {
+      expect(isResponsesAPICapable(undefined)).toBe(true);
     });
 
-    it("returns false for direct OpenAI", () => {
-      expect(isChatCompletionsGateway("https://api.openai.com/v1")).toBe(false);
+    it("returns true for direct OpenAI", () => {
+      expect(isResponsesAPICapable("https://api.openai.com/v1")).toBe(true);
     });
 
-    it("returns true for Kilo gateway", () => {
-      expect(isChatCompletionsGateway("https://api.kilo.ai/api/gateway")).toBe(true);
+    it("returns false for LiteLLM proxy", () => {
+      expect(isResponsesAPICapable("https://litellm.example.com")).toBe(false);
     });
 
-    it("returns true for Gemini gateway", () => {
-      expect(isChatCompletionsGateway("https://generativelanguage.googleapis.com/v1beta/openai")).toBe(true);
+    it("returns false for Kilo gateway", () => {
+      expect(isResponsesAPICapable("https://api.kilo.ai/api/gateway")).toBe(false);
+    });
+
+    it("returns false for Gemini gateway", () => {
+      expect(isResponsesAPICapable("https://generativelanguage.googleapis.com/v1beta/openai")).toBe(false);
     });
 
     it("returns false for localhost", () => {
-      expect(isChatCompletionsGateway("http://localhost:11434/v1")).toBe(false);
+      expect(isResponsesAPICapable("http://localhost:11434/v1")).toBe(false);
     });
   });
 
