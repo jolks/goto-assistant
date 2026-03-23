@@ -568,7 +568,7 @@ describe("setup-chat", () => {
 
       initSetupChat({ isEditing: false, config: null });
       // Pick Claude
-      let choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
       (choices[0] as HTMLElement).click();
       expect(setupChatState.current).toBe("api_key");
 
@@ -595,7 +595,7 @@ describe("setup-chat", () => {
 
       initSetupChat({ isEditing: false, config: null });
       // Pick OpenAI
-      let choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
       (choices[1] as HTMLElement).click();
       expect(setupChatState.current).toBe("api_key");
 
