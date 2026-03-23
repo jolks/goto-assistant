@@ -320,7 +320,12 @@ export const RESPONSES_API_HOSTS = [
  */
 export function isResponsesAPICapable(baseUrl: string | undefined): boolean {
   if (!baseUrl) return true;
-  return RESPONSES_API_HOSTS.some((host) => baseUrl.includes(host));
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    return RESPONSES_API_HOSTS.some((host) => hostname === host);
+  } catch {
+    return false;
+  }
 }
 
 export function getMaskedMcpServers(

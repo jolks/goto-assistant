@@ -350,6 +350,10 @@ describe("config", () => {
     it("returns false for localhost", () => {
       expect(isResponsesAPICapable("http://localhost:11434/v1")).toBe(false);
     });
+
+    it("returns false for spoofed OpenAI subdomain", () => {
+      expect(isResponsesAPICapable("https://api.openai.com.evil.com/v1")).toBe(false);
+    });
   });
 
   describe("syncEpisodicMcpServer", () => {
