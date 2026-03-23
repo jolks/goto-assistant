@@ -354,6 +354,22 @@ describe("config", () => {
     it("returns false for spoofed OpenAI subdomain", () => {
       expect(isResponsesAPICapable("https://api.openai.com.evil.com/v1")).toBe(false);
     });
+
+    it("returns true for Azure OpenAI", () => {
+      expect(isResponsesAPICapable("https://myresource.openai.azure.com/openai/v1/")).toBe(true);
+    });
+
+    it("returns true for Azure OpenAI with different resource", () => {
+      expect(isResponsesAPICapable("https://contoso.openai.azure.com/openai/v1/")).toBe(true);
+    });
+
+    it("returns false for spoofed Azure suffix", () => {
+      expect(isResponsesAPICapable("https://openai.azure.com.evil.com/v1")).toBe(false);
+    });
+
+    it("returns false for spoofed Azure no dot prefix", () => {
+      expect(isResponsesAPICapable("https://fakeopenai.azure.com/v1")).toBe(false);
+    });
   });
 
   describe("syncEpisodicMcpServer", () => {

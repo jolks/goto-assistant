@@ -304,25 +304,35 @@ export function syncBrokerConfig(servers?: Record<string, McpServerConfig>): voi
 }
 
 /**
- * Hostnames known to support the OpenAI Responses API. All other custom base
- * URLs default to the Chat Completions API, which is the universally supported
- * format across third-party proxies (LiteLLM, Ollama, vLLM, Groq, etc.) and
- * translates correctly to non-OpenAI backends like Anthropic.
+ * Hostnames and hostname suffixes identifying servers known to support the
+ * OpenAI Responses API. All other custom base URLs default to the Chat
+ * Completions API, which is the universally supported format across
+ * third-party proxies (LiteLLM, Ollama, vLLM, Groq, etc.) and translates
+ * correctly to non-OpenAI backends like Anthropic.
  */
-export const RESPONSES_API_HOSTS = [
-  "api.openai.com",
-] as const;
+const responsesAPIHosts = ["api.openai.com"] as const;
+
+/**
+ * Hostname suffixes for wildcard matching (e.g., ".openai.azure.com" matches
+ * "myresource.openai.azure.com"). The leading dot prevents false positives
+ * like "fakeopenai.azure.com".
+ */
+const responsesAPIHostSuffixes = [".openai.azure.com"] as const;
 
 /**
  * Returns true if baseUrl points to a server known to support the OpenAI
- * Responses API. When baseUrl is undefined/empty (direct OpenAI default) or
- * matches a known Responses API host, this returns true.
+ * Responses API. When baseUrl is undefined/empty (direct OpenAI default),
+ * matches a known host exactly, or matches a known hostname suffix (e.g.,
+ * Azure OpenAI), this returns true.
  */
 export function isResponsesAPICapable(baseUrl: string | undefined): boolean {
   if (!baseUrl) return true;
   try {
     const hostname = new URL(baseUrl).hostname;
-    return RESPONSES_API_HOSTS.some((host) => hostname === host);
+    return (
+      responsesAPIHosts.some((host) => hostname === host) ||
+      responsesAPIHostSuffixes.some((suffix) => hostname.endsWith(suffix))
+    );
   } catch {
     return false;
   }
