@@ -110,8 +110,8 @@ export async function runOpenAI(
   // universally support Chat Completions but may mistranslate the Responses API)
   const useChatCompletions = !isResponsesAPICapable(config.openai.baseUrl);
 
-  // Disable tracing for known gateways (Kilo, Gemini) that don't support the
-  // OpenAI tracing API. Keep it enabled for direct OpenAI and compatible proxies.
+  // Disable tracing for non-OpenAI endpoints that don't support the OpenAI
+  // tracing API. Keep it enabled for direct OpenAI only.
   setTracingDisabled(useChatCompletions);
   setOpenAIAPI(useChatCompletions ? "chat_completions" : "responses");
 
