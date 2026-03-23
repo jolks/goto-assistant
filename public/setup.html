@@ -36,8 +36,10 @@
           <label for="apiKey">API Key</label>
           <input type="password" id="apiKey" placeholder="sk-ant-... or sk-...">
 
-          <label for="baseUrl">Base URL <small>(optional — for LiteLLM proxy)</small></label>
-          <input type="text" id="baseUrl" placeholder="Leave empty for direct API">
+          <div id="baseUrlRow">
+            <label for="baseUrl">Base URL <small>(optional — for LiteLLM proxy)</small></label>
+            <input type="text" id="baseUrl" placeholder="Leave empty for direct API">
+          </div>
 
           <label for="model">Model</label>
           <div role="group">
@@ -128,6 +130,7 @@
     // Sync cron when provider, API key, base URL, or model changes
     document.querySelectorAll('input[name="provider"]').forEach(radio => {
       radio.addEventListener('change', () => {
+        toggleBaseUrl(getProvider());
         handleProviderSwitch(isEditing, window._savedConfig);
         doSyncCronConfig();
       });
@@ -348,6 +351,7 @@
     // Pre-fill form from existing config, then initialize chat panel
     (async () => {
       await window.refreshForm();
+      toggleBaseUrl(getProvider());
       initSetupChat({ isEditing, config: window._savedConfig || null });
     })();
 

@@ -100,13 +100,27 @@ function syncCronConfig(servers, isEditing, buildCronConfigFn, savedConfig) {
   return servers;
 }
 
+// Toggle base URL field visibility. Claude Agent SDK doesn't work with proxies.
+function toggleBaseUrl(provider) {
+  var row = document.getElementById('baseUrlRow');
+  if (!row) return;
+  if (provider === 'claude') {
+    row.style.display = 'none';
+    document.getElementById('baseUrl').value = '';
+  } else {
+    row.style.display = '';
+  }
+}
+
 // Handle provider switch: pre-fill baseUrl and model from saved config.
 function handleProviderSwitch(isEditing, savedConfig) {
   if (!isEditing || !savedConfig) return;
 
   var p = getProvider();
   var pc = savedConfig[p] || {};
-  document.getElementById('baseUrl').value = pc.baseUrl || '';
+  if (p !== 'claude') {
+    document.getElementById('baseUrl').value = pc.baseUrl || '';
+  }
   var select = document.getElementById('model');
   if (pc.model) {
     select.innerHTML = '<option value="' + escapeHtml(pc.model) + '">' + escapeHtml(pc.model) + '</option>';
@@ -116,5 +130,5 @@ function handleProviderSwitch(isEditing, savedConfig) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { defaultServers: defaultServers, getProvider: getProvider, renderServers: renderServers, readServers: readServers, syncCronConfig: syncCronConfig, handleProviderSwitch: handleProviderSwitch };
+  module.exports = { defaultServers: defaultServers, getProvider: getProvider, renderServers: renderServers, readServers: readServers, syncCronConfig: syncCronConfig, handleProviderSwitch: handleProviderSwitch, toggleBaseUrl: toggleBaseUrl };
 }

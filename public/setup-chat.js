@@ -204,10 +204,38 @@ function handleInput(text) {
     // Update form and sync cron config
     document.getElementById('apiKey').value = text;
     syncCronFromChat();
-    // Advance to base URL
-    setupChatState.current = 'base_url';
-    addMessage('assistant', 'Do you need a custom base URL? (For LiteLLM proxy)\n\nPress Enter to skip for direct API access.');
-    setInputMode('optional');
+    if (setupChatState.provider === 'claude') {
+      // Claude Agent SDK doesn't support proxies — skip base URL
+      setupChatState.baseUrl = '';
+      setupChatState.current = 'loading_models';
+      addMessage('assistant', 'Loading available models...');
+      setInputMode('disabled');
+      loadModelsForChat(setupChatState.provider, setupChatState.apiKey, '')
+        .then(function (models) {
+          var select = document.getElementById('model');
+          select.innerHTML = models.map(function (m) {
+            return '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.name) + '</option>';
+          }).join('');
+          setupChatState.current = 'model';
+          addMessage('assistant', 'Select a model:');
+          showChoices(models.map(function (m) {
+            return { label: m.name, value: m.id };
+          }), function (modelId) {
+            handleModelSelect(modelId);
+          });
+        })
+        .catch(function (err) {
+          addMessage('assistant', 'Failed to load models: ' + err.message + '\n\nPlease check your API key and try again.');
+          setupChatState.current = 'api_key';
+          addMessage('assistant', 'Please enter your API key:');
+          setInputMode('password');
+        });
+    } else {
+      // Advance to base URL for OpenAI
+      setupChatState.current = 'base_url';
+      addMessage('assistant', 'Do you need a custom base URL? (For LiteLLM proxy)\n\nPress Enter to skip for direct API access.');
+      setInputMode('optional');
+    }
     return;
   }
 
