@@ -180,6 +180,8 @@ describe("setup page", () => {
       expect(select.value).toBe("gpt-4o");
     });
 
+    // Note: in production, toggleBaseUrl("claude") is called first, which clears
+    // the value and hides the row. This tests handleProviderSwitch in isolation.
     it("does not restore baseUrl when switching to claude", () => {
       setProvider("claude");
       setField("baseUrl", "https://old-proxy.example.com");
