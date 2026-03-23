@@ -57,7 +57,9 @@ function setupDOM() {
         <label><input type="radio" name="provider" value="claude" checked> Claude</label>
         <label><input type="radio" name="provider" value="openai"> OpenAI</label>
         <input type="password" id="apiKey" value="">
-        <input type="text" id="baseUrl" value="">
+        <div id="baseUrlRow">
+          <input type="text" id="baseUrl" value="">
+        </div>
         <select id="model"><option value="">— Select provider first —</option></select>
         <input type="number" id="port" value="3000">
         <input type="checkbox" id="waEnabled">
@@ -239,13 +241,20 @@ describe("setup-chat", () => {
   });
 
   describe("handleInput — Q&A state transitions", () => {
-    it("api_key state: sets apiKey and advances to base_url", () => {
+    it("api_key state with claude: skips base_url and advances to loading_models", () => {
       setupChatState.current = "api_key";
       setupChatState.provider = "claude";
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" }] }),
+      });
+
       handleInput("sk-ant-test-key");
 
       expect(setupChatState.apiKey).toBe("sk-ant-test-key");
-      expect(setupChatState.current).toBe("base_url");
+      expect(setupChatState.baseUrl).toBe("");
+      expect(setupChatState.current).toBe("loading_models");
       // Form field should be updated
       expect((document.getElementById("apiKey") as HTMLInputElement).value).toBe("sk-ant-test-key");
       // Chat should show masked key
@@ -253,15 +262,28 @@ describe("setup-chat", () => {
       expect(msgs[0].textContent).toContain("\u2022\u2022\u2022\u2022");
     });
 
+    it("api_key state with openai: advances to base_url", () => {
+      setupChatState.current = "api_key";
+      setupChatState.provider = "openai";
+      handleInput("sk-openai-test-key");
+
+      expect(setupChatState.apiKey).toBe("sk-openai-test-key");
+      expect(setupChatState.current).toBe("base_url");
+      expect((document.getElementById("apiKey") as HTMLInputElement).value).toBe("sk-openai-test-key");
+      // Chat should show masked key
+      const msgs = document.querySelectorAll("#chatMessages .message.user");
+      expect(msgs[0].textContent).toContain("\u2022\u2022\u2022\u2022");
+    });
+
     it("base_url state with empty input: skips and advances to loading_models", () => {
       setupChatState.current = "base_url";
-      setupChatState.provider = "claude";
+      setupChatState.provider = "openai";
       setupChatState.apiKey = "sk-test";
 
       // Mock fetch for loadModelsForChat
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ models: [{ id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" }] }),
+        json: () => Promise.resolve({ models: [{ id: "gpt-4o", name: "gpt-4o" }] }),
       });
 
       handleInput("");
@@ -524,6 +546,74 @@ describe("setup-chat", () => {
       expect(choices).toHaveLength(2);
       expect(choices[0].textContent).toBe("Skip");
       expect(choices[1].textContent).toBe("Enable WhatsApp");
+    });
+  });
+
+  describe("full Q&A flow — base URL skip for Claude", () => {
+    function renderDefaultServers() {
+      const servers = [
+        { name: "cron", command: "npx", args: "-y mcp-cron --transport stdio --prevent-sleep --mcp-config-path ./data/mcp.json --ai-provider anthropic --ai-model claude-sonnet-4-5-20250929", env: {} },
+        { name: "memory", command: "npx", args: "-y @modelcontextprotocol/server-memory", env: {} },
+        { name: "time", command: "uvx", args: "mcp-server-time", env: {} },
+      ];
+      renderServers(servers);
+    }
+
+    it("Claude flow: provider → api_key → loading_models (skips base_url)", async () => {
+      renderDefaultServers();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" }] }),
+      });
+
+      initSetupChat({ isEditing: false, config: null });
+      // Pick Claude
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      (choices[0] as HTMLElement).click();
+      expect(setupChatState.current).toBe("api_key");
+
+      // Enter API key — should skip base_url
+      handleInput("sk-ant-test");
+      expect(setupChatState.current).toBe("loading_models");
+      expect(setupChatState.baseUrl).toBe("");
+
+      // Wait for model loading
+      await new Promise((r) => setTimeout(r, 50));
+      expect(setupChatState.current).toBe("model");
+      // base_url was never visited
+      const assistantMsgs = Array.from(document.querySelectorAll("#chatMessages .message.assistant"));
+      const baseUrlPrompt = assistantMsgs.find((el) => el.textContent!.includes("custom base URL"));
+      expect(baseUrlPrompt).toBeUndefined();
+    });
+
+    it("OpenAI flow: provider → api_key → base_url → loading_models", async () => {
+      renderDefaultServers();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ id: "gpt-4o", name: "gpt-4o" }] }),
+      });
+
+      initSetupChat({ isEditing: false, config: null });
+      // Pick OpenAI
+      const choices = document.querySelectorAll("#chatChoices .chat-choice-btn");
+      (choices[1] as HTMLElement).click();
+      expect(setupChatState.current).toBe("api_key");
+
+      // Enter API key — should advance to base_url
+      handleInput("sk-openai-test");
+      expect(setupChatState.current).toBe("base_url");
+
+      // Skip base URL
+      handleInput("");
+      expect(setupChatState.current).toBe("loading_models");
+
+      // Wait for model loading
+      await new Promise((r) => setTimeout(r, 50));
+      expect(setupChatState.current).toBe("model");
+      // base_url prompt was shown
+      const assistantMsgs = Array.from(document.querySelectorAll("#chatMessages .message.assistant"));
+      const baseUrlPrompt = assistantMsgs.find((el) => el.textContent!.includes("custom base URL"));
+      expect(baseUrlPrompt).toBeDefined();
     });
   });
 

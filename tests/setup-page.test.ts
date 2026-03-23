@@ -19,6 +19,7 @@ import {
   readServers,
   syncCronConfig,
   handleProviderSwitch,
+  toggleBaseUrl,
 } from "../public/setup.js";
 
 interface Server {
@@ -36,7 +37,9 @@ function setupDOM() {
       <label><input type="radio" name="provider" value="openai"> OpenAI</label>
     </div>
     <input type="password" id="apiKey" value="">
-    <input type="text" id="baseUrl" value="">
+    <div id="baseUrlRow">
+      <input type="text" id="baseUrl" value="">
+    </div>
     <select id="model"><option value="">— Select provider first —</option></select>
     <div id="mcpServers" class="mcp-servers"></div>
   `;
@@ -135,6 +138,30 @@ describe("setup page", () => {
     });
   });
 
+  // -- Base URL visibility --
+
+  describe("toggleBaseUrl", () => {
+    it("hides baseUrlRow and clears value for claude", () => {
+      setField("baseUrl", "https://proxy.example.com");
+      toggleBaseUrl("claude");
+      const row = document.getElementById("baseUrlRow") as HTMLElement;
+      expect(row.style.display).toBe("none");
+      expect((document.getElementById("baseUrl") as HTMLInputElement).value).toBe("");
+    });
+
+    it("shows baseUrlRow for openai", () => {
+      const row = document.getElementById("baseUrlRow") as HTMLElement;
+      row.style.display = "none";
+      toggleBaseUrl("openai");
+      expect(row.style.display).toBe("");
+    });
+
+    it("does not throw when baseUrlRow is missing", () => {
+      document.getElementById("baseUrlRow")!.remove();
+      expect(() => toggleBaseUrl("claude")).not.toThrow();
+    });
+  });
+
   // -- Provider switching (Bug 2a) --
 
   describe("handleProviderSwitch", () => {
@@ -153,16 +180,20 @@ describe("setup page", () => {
       expect(select.value).toBe("gpt-4o");
     });
 
-    it("populates baseUrl and model when switching to claude", () => {
+    // Note: in production, toggleBaseUrl("claude") is called first, which clears
+    // the value and hides the row. This tests handleProviderSwitch in isolation.
+    it("does not restore baseUrl when switching to claude", () => {
       setProvider("claude");
+      setField("baseUrl", "https://old-proxy.example.com");
       const savedConfig = {
         claude: { baseUrl: "https://claude-proxy.example.com", model: "claude-sonnet-4-5-20250929" },
         openai: { baseUrl: "", model: "gpt-4o" },
       };
       handleProviderSwitch(true, savedConfig);
 
+      // baseUrl should NOT be restored for Claude (SDK doesn't support proxies)
       expect((document.getElementById("baseUrl") as HTMLInputElement).value).toBe(
-        "https://claude-proxy.example.com"
+        "https://old-proxy.example.com"
       );
       expect((document.getElementById("model") as HTMLSelectElement).value).toBe(
         "claude-sonnet-4-5-20250929"
@@ -221,6 +252,39 @@ describe("setup page", () => {
       };
       handleProviderSwitch(true, savedConfig);
 
+      expect((document.getElementById("baseUrl") as HTMLInputElement).value).toBe(
+        "https://litellm.example.com/v1"
+      );
+    });
+
+    it("combined toggleBaseUrl + handleProviderSwitch hides and clears for claude", () => {
+      setField("baseUrl", "https://proxy.example.com");
+      setProvider("claude");
+      const savedConfig = {
+        claude: { baseUrl: "https://claude-proxy.example.com", model: "claude-sonnet-4-5-20250929" },
+        openai: { baseUrl: "https://openai-proxy.example.com", model: "gpt-4o" },
+      };
+      toggleBaseUrl("claude");
+      handleProviderSwitch(true, savedConfig);
+
+      const row = document.getElementById("baseUrlRow") as HTMLElement;
+      expect(row.style.display).toBe("none");
+      expect((document.getElementById("baseUrl") as HTMLInputElement).value).toBe("");
+    });
+
+    it("combined toggleBaseUrl + handleProviderSwitch shows and restores for openai", () => {
+      // Start hidden (as if coming from Claude)
+      const row = document.getElementById("baseUrlRow") as HTMLElement;
+      row.style.display = "none";
+      setProvider("openai");
+      const savedConfig = {
+        claude: { baseUrl: "", model: "claude-sonnet-4-5-20250929" },
+        openai: { baseUrl: "https://litellm.example.com/v1", model: "gpt-4o" },
+      };
+      toggleBaseUrl("openai");
+      handleProviderSwitch(true, savedConfig);
+
+      expect(row.style.display).toBe("");
       expect((document.getElementById("baseUrl") as HTMLInputElement).value).toBe(
         "https://litellm.example.com/v1"
       );
