@@ -13,6 +13,16 @@ const debug = createDebug("goto-assistant:openai");
 
 const execAsync = promisify(exec);
 
+/**
+ * Returns true if the error indicates a tool type is not supported by the model.
+ * Example: "Tool 'shell' is not supported with gpt-5-nano"
+ * The error is a 400 from the API that fires before streaming, so retry is safe.
+ */
+function isUnsupportedToolError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("is not supported with");
+}
+
 class LocalShell implements Shell {
   async run(action: ShellAction): Promise<ShellResult> {
     const output: ShellOutputResult[] = [];
@@ -157,17 +167,12 @@ export async function runOpenAI(
       await server.connect();
     }
 
-    const agent = new Agent({
-      name: "goto-assistant",
-      instructions:
-        systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, scheduled tasks, and more. You also have a shell tool to execute commands on the host machine. You can also send messages to the user via connected messaging channels (e.g. WhatsApp) using the messaging tools — send to self or to any phone number. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
-      model: config.openai.model,
-      mcpServers,
-      // shellTool is a hosted tool — only available with the Responses API
-      tools: useChatCompletions ? [] : [
-        shellTool({ shell: new LocalShell() }),
-      ],
-    });
+    // shellTool is only available with the Responses API; not all Responses API
+    // models support it (e.g. gpt-5-nano rejects it with a 400). If the model
+    // rejects it, the retry loop below will re-create the agent without tools.
+    let tools = useChatCompletions ? [] : [
+      shellTool({ shell: new LocalShell() }),
+    ];
 
     // Build conversation input with history
     const inputMessages: Array<Record<string, unknown>> = [];
@@ -240,26 +245,47 @@ export async function runOpenAI(
     const trimmedMessages = trimHistory(inputMessages);
     const input = trimmedMessages.length === 1 && !history?.length && !attachments?.length ? prompt : trimmedMessages;
 
-    try {
-      const result = await runner.run(agent, input as string, { stream: true, maxTurns: MAX_AGENT_TURNS });
+    // Retry loop: if the model rejects a tool type (400 "is not supported
+    // with"), retry once without tools. The error fires before any streaming
+    // output, so retry is safe and invisible to the user.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const agent = new Agent({
+        name: "goto-assistant",
+        instructions:
+          systemPromptOverride || "You are a helpful personal AI assistant. You have access to MCP tools for memory, scheduled tasks, and more. You also have a shell tool to execute commands on the host machine. You can also send messages to the user via connected messaging channels (e.g. WhatsApp) using the messaging tools — send to self or to any phone number. Use them when appropriate. IMPORTANT: At the start of each conversation, you MUST call the memory read_graph tool to retrieve all known context about the user before responding to their first message.",
+        model: config.openai.model,
+        mcpServers,
+        tools,
+      });
 
-      for await (const event of result) {
-        if (
-          event.type === "raw_model_stream_event" &&
-          event.data?.type === "output_text_delta"
-        ) {
-          const delta = (event.data as { delta?: string }).delta;
-          if (delta) {
-            onChunk(delta);
+      try {
+        const result = await runner.run(agent, input as string, { stream: true, maxTurns: MAX_AGENT_TURNS });
+
+        for await (const event of result) {
+          if (
+            event.type === "raw_model_stream_event" &&
+            event.data?.type === "output_text_delta"
+          ) {
+            const delta = (event.data as { delta?: string }).delta;
+            if (delta) {
+              onChunk(delta);
+            }
           }
         }
+        break;
+      } catch (error) {
+        if (error instanceof MaxTurnsExceededError) {
+          onChunk(`\n\n[Stopped: reached the maximum number of tool-use turns (${MAX_AGENT_TURNS}). You can continue the conversation to pick up where I left off.]`);
+          return;
+        }
+        if (attempt === 0 && tools.length > 0 && isUnsupportedToolError(error)) {
+          debug("model %s does not support tool type, retrying without tools: %s",
+            config.openai.model, (error as Error).message);
+          tools = [];
+          continue;
+        }
+        throw error;
       }
-    } catch (error) {
-      if (error instanceof MaxTurnsExceededError) {
-        onChunk(`\n\n[Stopped: reached the maximum number of tool-use turns (${MAX_AGENT_TURNS}). You can continue the conversation to pick up where I left off.]`);
-        return;
-      }
-      throw error;
     }
   } finally {
     // Disconnect all MCP servers
