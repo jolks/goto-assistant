@@ -262,6 +262,61 @@ describe("openai max turns handling", () => {
   });
 });
 
+describe("openai unsupported tool retry", () => {
+  it("retries without tools when model rejects shell tool", async () => {
+    const { Agent } = await import("@openai/agents");
+    let runCallCount = 0;
+    mockRun.mockImplementation(() => {
+      runCallCount++;
+      if (runCallCount === 1) {
+        throw new Error("400 Tool 'shell' is not supported with gpt-5-nano");
+      }
+      return {
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            type: "raw_model_stream_event",
+            data: { type: "output_text_delta", delta: "ok" },
+          };
+        },
+      };
+    });
+
+    const chunks: string[] = [];
+    await runOpenAI("hello", config, mcpServers, (text) => chunks.push(text));
+
+    expect(runCallCount).toBe(2);
+    expect(chunks).toEqual(["ok"]);
+    // Agent was created twice — second time with empty tools
+    const agentCalls = vi.mocked(Agent).mock.calls;
+    expect(agentCalls.length).toBeGreaterThanOrEqual(2);
+    const lastCall = agentCalls[agentCalls.length - 1][0] as { tools: unknown[] };
+    expect(lastCall.tools).toEqual([]);
+  });
+
+  it("does not retry for unrelated 400 errors", async () => {
+    mockRun.mockImplementationOnce(() => {
+      throw new Error("400 Invalid model: gpt-nonexistent");
+    });
+
+    await expect(
+      runOpenAI("hello", config, mcpServers, vi.fn())
+    ).rejects.toThrow("Invalid model");
+  });
+
+  it("does not retry more than once", async () => {
+    let runCallCount = 0;
+    mockRun.mockImplementation(() => {
+      runCallCount++;
+      throw new Error("400 Tool 'shell' is not supported with gpt-5-nano");
+    });
+
+    await expect(
+      runOpenAI("hello", config, mcpServers, vi.fn())
+    ).rejects.toThrow("is not supported with");
+    expect(runCallCount).toBe(2);
+  });
+});
+
 describe("openai event streaming", () => {
   it("calls onChunk with text delta from raw_model_stream_event / output_text_delta", async () => {
     mockRun.mockImplementationOnce(() => ({
