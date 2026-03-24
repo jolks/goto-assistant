@@ -10,6 +10,7 @@ import makeWASocket, {
   type proto,
 } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
+import createDebug from "debug";
 import { DATA_DIR, loadConfig, getAgentMcpServers } from "./config.js";
 import fs from "node:fs";
 import { registerChannel, unregisterChannel, ChannelUnavailableError, type SendMediaOptions } from "./messaging.js";
@@ -27,6 +28,7 @@ import {
 import { saveUpload, ALLOWED_IMAGE_TYPES } from "./uploads.js";
 import { UPLOADS_DIR } from "./uploads.js";
 
+const debug = createDebug("goto-assistant:whatsapp");
 const AUTH_DIR = path.join(DATA_DIR, "whatsapp-auth");
 
 type ConnectionStatus = "disconnected" | "connecting" | "qr_ready" | "connected";
@@ -50,6 +52,20 @@ const MAX_SENT_IDS = 500;
 /** Get the normalized own JID (e.g. "60123456789@s.whatsapp.net") from the socket. */
 function getOwnJid(): string | undefined {
   return sock?.user?.id?.replace(/:.*@/, "@");
+}
+
+/** Get the normalized own LID (e.g. "108229099032777@lid") from the socket. */
+function getOwnLid(): string | undefined {
+  return sock?.user?.lid?.replace(/:.*@/, "@");
+}
+
+/**
+ * Check if a remoteJid belongs to the user's self-chat.
+ * WhatsApp uses both phone-number JIDs (@s.whatsapp.net) and LID JIDs (@lid)
+ * for self-chat — match against both.
+ */
+function checkSelfChat(remoteJid: string, ownJid: string | undefined, ownLid: string | undefined): boolean {
+  return (!!ownJid && remoteJid === ownJid) || (!!ownLid && remoteJid === ownLid);
 }
 
 /** Track a sent message ID for loop prevention. Caps the set at MAX_SENT_IDS. */
@@ -109,16 +125,22 @@ function enqueueChat(chatId: string, fn: () => Promise<void>): void {
 }
 
 async function handleMessage(msg: proto.IWebMessageInfo): Promise<void> {
+  debug("messages.upsert received: id=%s remoteJid=%s fromMe=%s", msg.key?.id, msg.key?.remoteJid, msg.key?.fromMe);
   if (!msg.message || !msg.key?.remoteJid) return;
   if (msg.key.remoteJid === "status@broadcast") return;
 
   // Only respond in self-chat (user messaging themselves) — never reply to other people
   const ownJid = getOwnJid();
-  const isSelfChat = ownJid && msg.key.remoteJid === ownJid;
+  const ownLid = getOwnLid();
+  const isSelfChat = checkSelfChat(msg.key.remoteJid, ownJid, ownLid);
+  debug("self-chat check: ownJid=%s ownLid=%s remoteJid=%s isSelfChat=%s", ownJid, ownLid, msg.key.remoteJid, isSelfChat);
   if (!isSelfChat) return;
 
   // Skip messages the agent itself sent (prevents infinite loops)
-  if (msg.key.id && sentMessageIds.has(msg.key.id)) return;
+  if (msg.key.id && sentMessageIds.has(msg.key.id)) {
+    debug("skipping own sent message: id=%s", msg.key.id);
+    return;
+  }
 
   const chatId = msg.key.remoteJid;
 
@@ -337,6 +359,7 @@ export async function startWhatsApp(): Promise<void> {
 
   // Handle incoming messages
   sock.ev.on("messages.upsert", (upsert: BaileysEventMap["messages.upsert"]) => {
+    debug("messages.upsert event: type=%s count=%d", upsert.type, upsert.messages?.length ?? 0);
     if (upsert.type !== "notify") return;
     for (const msg of upsert.messages) {
       handleMessage(msg).catch((err) =>
@@ -414,12 +437,14 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
   if (!sock) throw new ChannelUnavailableError("WhatsApp is not connected");
 
   if (!jid) {
+    // Prefer LID (WhatsApp's current self-chat format), fall back to phone JID
+    const ownLid = getOwnLid();
     const ownJid = getOwnJid();
-    if (!ownJid) throw new Error("WhatsApp own JID not available");
-    jid = ownJid;
+    jid = ownLid || ownJid;
+    if (!jid) throw new Error("WhatsApp own JID not available");
   }
 
-  const isSelf = jid === getOwnJid();
+  const isSelf = checkSelfChat(jid, getOwnJid(), getOwnLid());
 
   // Media path: send a single media message
   if (options?.media) {
@@ -483,4 +508,4 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
 }
 
 // Exported for testing
-export { enqueueChat as _enqueueChat, chatQueues as _chatQueues };
+export { enqueueChat as _enqueueChat, chatQueues as _chatQueues, checkSelfChat as _checkSelfChat };

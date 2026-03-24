@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { splitMessage, sendWhatsAppMessage, lookupMimeType, classifyMediaType, _enqueueChat, _chatQueues } from "../src/whatsapp.js";
+import { splitMessage, sendWhatsAppMessage, lookupMimeType, classifyMediaType, _enqueueChat, _chatQueues, _checkSelfChat } from "../src/whatsapp.js";
 import { ChannelUnavailableError } from "../src/messaging.js";
 
 describe("whatsapp", () => {
@@ -237,6 +237,35 @@ describe("whatsapp", () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(_chatQueues.has("chat1")).toBe(false);
+    });
+  });
+
+  describe("checkSelfChat", () => {
+    const phoneJid = "60123456789@s.whatsapp.net";
+    const lidJid = "987654321000@lid";
+
+    it("matches phone-number JID (@s.whatsapp.net)", () => {
+      expect(_checkSelfChat(phoneJid, phoneJid, undefined)).toBe(true);
+    });
+
+    it("matches LID JID (@lid)", () => {
+      expect(_checkSelfChat(lidJid, undefined, lidJid)).toBe(true);
+    });
+
+    it("matches LID when both JID and LID are available", () => {
+      expect(_checkSelfChat(lidJid, phoneJid, lidJid)).toBe(true);
+    });
+
+    it("matches phone JID when both JID and LID are available", () => {
+      expect(_checkSelfChat(phoneJid, phoneJid, lidJid)).toBe(true);
+    });
+
+    it("rejects non-matching JID", () => {
+      expect(_checkSelfChat("999999999@s.whatsapp.net", phoneJid, lidJid)).toBe(false);
+    });
+
+    it("rejects when both ownJid and ownLid are undefined", () => {
+      expect(_checkSelfChat(phoneJid, undefined, undefined)).toBe(false);
     });
   });
 });
