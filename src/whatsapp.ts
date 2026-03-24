@@ -437,12 +437,14 @@ export async function sendWhatsAppMessage(text: string, to?: string, options?: S
   if (!sock) throw new ChannelUnavailableError("WhatsApp is not connected");
 
   if (!jid) {
+    // Prefer LID (WhatsApp's current self-chat format), fall back to phone JID
+    const ownLid = getOwnLid();
     const ownJid = getOwnJid();
-    if (!ownJid) throw new Error("WhatsApp own JID not available");
-    jid = ownJid;
+    jid = ownLid || ownJid;
+    if (!jid) throw new Error("WhatsApp own JID not available");
   }
 
-  const isSelf = jid === getOwnJid();
+  const isSelf = checkSelfChat(jid, getOwnJid(), getOwnLid());
 
   // Media path: send a single media message
   if (options?.media) {
