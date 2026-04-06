@@ -466,7 +466,7 @@ describe("server", () => {
       const app = createApp();
       const res = await makeRequest(app, "POST", "/api/tasks/t1/run");
       expect(res.status).toBe(200);
-      expect(callCronTool).toHaveBeenCalledWith("run_task", { id: "t1" });
+      expect(callCronTool).toHaveBeenCalledWith("run_task", { id: "t1" }, 130_000);
     });
 
     it("POST /api/tasks/:id/enable calls enable_task", async () => {

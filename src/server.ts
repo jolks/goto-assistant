@@ -258,7 +258,15 @@ export function createApp(): Express {
 
   cronProxy("put", "/api/tasks/:id", "update_task", (req) => ({ id: req.params.id, ...req.body }));
   cronProxy("delete", "/api/tasks/:id", "remove_task");
-  cronProxy("post", "/api/tasks/:id/run", "run_task");
+  // run_task blocks until the task completes (up to 120s in mcp-cron)
+  app.post("/api/tasks/:id/run", async (req, res) => {
+    try {
+      const result = await callCronTool("run_task", { id: req.params.id }, 130_000);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
   cronProxy("post", "/api/tasks/:id/enable", "enable_task");
   cronProxy("post", "/api/tasks/:id/disable", "disable_task");
   cronProxy("get", "/api/tasks/:id/results", "get_task_result", (req) => ({
