@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // setup.js references DEFAULT_CRON_ARGS and escapeHtml as globals (set by cron-sync.js <script> in the browser).
 // vi.hoisted runs before imports are evaluated, so setup.js can find them during module init.
@@ -20,6 +20,8 @@ import {
   syncCronConfig,
   handleProviderSwitch,
   toggleBaseUrl,
+  showApiKeyStatus,
+  autoLoadModels,
 } from "../public/setup.js";
 
 interface Server {
@@ -37,11 +39,18 @@ function setupDOM() {
       <label><input type="radio" name="provider" value="openai"> OpenAI</label>
     </div>
     <input type="password" id="apiKey" value="">
+    <small id="apiKeyStatus" class="api-key-status"></small>
     <div id="baseUrlRow">
       <input type="text" id="baseUrl" value="">
     </div>
-    <select id="model"><option value="">— Select provider first —</option></select>
-    <div id="mcpServers" class="mcp-servers"></div>
+    <div class="model-select-row">
+      <select id="model"><option value="">— Select provider first —</option></select>
+      <span id="modelSpinner" class="model-spinner" style="display:none"></span>
+    </div>
+    <details id="mcpDetails">
+      <summary>MCP Servers <small id="mcpCount"></small></summary>
+      <div id="mcpServers" class="mcp-servers"></div>
+    </details>
   `;
 }
 
@@ -524,6 +533,187 @@ describe("setup page", () => {
       expect(cron.args).toContain("--ai-base-url https://litellm.example.com/v1");
       expect(cron.env).toHaveProperty("MCP_CRON_AI_API_KEY");
       expect(cron.env).not.toHaveProperty("OPENAI_API_KEY");
+    });
+  });
+
+  // -- API key status indicator --
+
+  describe("showApiKeyStatus", () => {
+    it("shows 'Key saved' text and saved class when true", () => {
+      showApiKeyStatus(true);
+      const el = document.getElementById("apiKeyStatus")!;
+      expect(el.textContent).toBe("Key saved");
+      expect(el.className).toBe("api-key-status saved");
+    });
+
+    it("clears text and resets class when false", () => {
+      showApiKeyStatus(true);
+      showApiKeyStatus(false);
+      const el = document.getElementById("apiKeyStatus")!;
+      expect(el.textContent).toBe("");
+      expect(el.className).toBe("api-key-status");
+    });
+
+    it("does not throw when element is missing", () => {
+      document.getElementById("apiKeyStatus")!.remove();
+      expect(() => showApiKeyStatus(true)).not.toThrow();
+    });
+  });
+
+  // -- Auto-load models --
+
+  describe("autoLoadModels", () => {
+    let originalFetch: typeof globalThis.fetch;
+    let fetchBody: Record<string, unknown> | null;
+
+    function mockFetch(response: { ok: boolean; models?: Array<{ id: string; name: string }> }) {
+      fetchBody = null;
+      globalThis.fetch = vi.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+        if (opts?.body) fetchBody = JSON.parse(opts.body as string);
+        if (!response.ok) {
+          return Promise.resolve({
+            ok: false,
+            json: () => Promise.resolve({ error: "No API key configured" }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ models: response.models }),
+        });
+      }) as unknown as typeof fetch;
+    }
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it("shows loading state and spinner while fetching", async () => {
+      let resolveResponse!: (v: unknown) => void;
+      globalThis.fetch = vi.fn().mockImplementation(() => {
+        return new Promise((r) => { resolveResponse = r; });
+      }) as unknown as typeof fetch;
+
+      const promise = autoLoadModels("claude", "sk-test", undefined, undefined);
+      const select = document.getElementById("model") as HTMLSelectElement;
+      const spinner = document.getElementById("modelSpinner") as HTMLElement;
+      expect(select.innerHTML).toContain("Loading...");
+      expect(spinner.style.display).toBe("");
+
+      resolveResponse({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" }] }),
+      });
+      await promise;
+      expect(spinner.style.display).toBe("none");
+    });
+
+    it("populates select with returned models", async () => {
+      mockFetch({ ok: true, models: [
+        { id: "gpt-4o", name: "GPT-4o" },
+        { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+      ]});
+      await autoLoadModels("openai", "sk-test", undefined, undefined);
+      const select = document.getElementById("model") as HTMLSelectElement;
+      expect(select.options).toHaveLength(2);
+      expect(select.options[0].value).toBe("gpt-4o");
+      expect(select.options[0].text).toBe("GPT-4o");
+      expect(select.options[1].value).toBe("gpt-3.5-turbo");
+    });
+
+    it("pre-selects savedModel when it exists in the list", async () => {
+      mockFetch({ ok: true, models: [
+        { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+        { id: "gpt-4o", name: "GPT-4o" },
+        { id: "gpt-4o-mini", name: "GPT-4o Mini" },
+      ]});
+      await autoLoadModels("openai", "sk-test", undefined, "gpt-4o");
+      const select = document.getElementById("model") as HTMLSelectElement;
+      expect(select.value).toBe("gpt-4o");
+    });
+
+    it("omits apiKey from request body when not provided", async () => {
+      mockFetch({ ok: true, models: [{ id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" }] });
+      await autoLoadModels("claude", undefined, undefined, undefined);
+      expect(fetchBody).toEqual({ provider: "claude" });
+      expect(fetchBody).not.toHaveProperty("apiKey");
+    });
+
+    it("includes apiKey in request body when provided", async () => {
+      mockFetch({ ok: true, models: [{ id: "gpt-4o", name: "GPT-4o" }] });
+      await autoLoadModels("openai", "sk-test-key", undefined, undefined);
+      expect(fetchBody).toHaveProperty("apiKey", "sk-test-key");
+    });
+
+    it("includes baseUrl when provided", async () => {
+      mockFetch({ ok: true, models: [{ id: "gpt-4o", name: "GPT-4o" }] });
+      await autoLoadModels("openai", "sk-test", "https://proxy.example.com/v1", undefined);
+      expect(fetchBody).toHaveProperty("baseUrl", "https://proxy.example.com/v1");
+    });
+
+    it("sends baseUrl as empty string when explicitly cleared", async () => {
+      mockFetch({ ok: true, models: [{ id: "gpt-4o", name: "GPT-4o" }] });
+      await autoLoadModels("openai", "sk-test", "", undefined);
+      expect(fetchBody).toHaveProperty("baseUrl", "");
+    });
+
+    it("omits baseUrl when undefined (backend uses saved config)", async () => {
+      mockFetch({ ok: true, models: [{ id: "gpt-4o", name: "GPT-4o" }] });
+      await autoLoadModels("openai", undefined, undefined, undefined);
+      expect(fetchBody).not.toHaveProperty("baseUrl");
+    });
+
+    it("shows error option on fetch failure", async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("network error")) as unknown as typeof fetch;
+      await autoLoadModels("openai", "sk-test", undefined, undefined);
+      const select = document.getElementById("model") as HTMLSelectElement;
+      expect(select.innerHTML).toContain("Failed to load models");
+      expect((document.getElementById("modelSpinner") as HTMLElement).style.display).toBe("none");
+    });
+
+    it("shows 'Enter API key' option when backend returns error", async () => {
+      mockFetch({ ok: false });
+      await autoLoadModels("openai", undefined, undefined, undefined);
+      const select = document.getElementById("model") as HTMLSelectElement;
+      expect(select.innerHTML).toContain("Enter API key to load models");
+    });
+
+    it("dispatches change event on model select after populating", async () => {
+      mockFetch({ ok: true, models: [{ id: "gpt-4o", name: "GPT-4o" }] });
+      const select = document.getElementById("model") as HTMLSelectElement;
+      const changeSpy = vi.fn();
+      select.addEventListener("change", changeSpy);
+      await autoLoadModels("openai", "sk-test", undefined, undefined);
+      expect(changeSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -- MCP Servers details/summary --
+
+  describe("MCP Servers details", () => {
+    it("details element is collapsed by default", () => {
+      const details = document.getElementById("mcpDetails") as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+    });
+
+    it("count badge updates correctly", () => {
+      const countEl = document.getElementById("mcpCount")!;
+      countEl.textContent = "(7)";
+      expect(countEl.textContent).toBe("(7)");
+    });
+
+    it("servers render inside details when expanded", () => {
+      const details = document.getElementById("mcpDetails") as HTMLDetailsElement;
+      details.open = true;
+      renderServers([
+        { name: "memory", command: "npx", args: "-y server-memory", env: {} },
+        { name: "cron", command: "npx", args: "-y mcp-cron", env: {} },
+      ]);
+      const serverEls = document.querySelectorAll(".mcp-server");
+      expect(serverEls).toHaveLength(2);
     });
   });
 });

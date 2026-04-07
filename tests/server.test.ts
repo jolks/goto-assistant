@@ -794,6 +794,124 @@ describe("server", () => {
       const body = await res.json();
       expect(body.error).toContain("Invalid provider");
     });
+
+    it("falls back to saved API key when apiKey not in request", async () => {
+      const savedEnvKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      const mockModels = { data: [{ id: "gpt-4o" }] };
+      const originalFetch = globalThis.fetch;
+      let capturedAuth = "";
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (!urlStr.includes("localhost") && urlStr.includes("/models")) {
+          capturedAuth = (opts?.headers as Record<string, string>)?.["Authorization"] ?? "";
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockModels) });
+        }
+        return originalFetch(url as RequestInfo, opts);
+      }) as unknown as typeof fetch;
+
+      try {
+        saveConfig(testConfig); // has openai.apiKey: "sk-openai-test789"
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, { provider: "openai" });
+        expect(res.status).toBe(200);
+        expect(capturedAuth).toBe("Bearer sk-openai-test789");
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (savedEnvKey !== undefined) process.env.OPENAI_API_KEY = savedEnvKey;
+      }
+    });
+
+    it("falls back to saved baseUrl when baseUrl not in request", async () => {
+      const savedEnvKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      const configWithProxy = {
+        ...testConfig,
+        openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "https://proxy.example.com" },
+      };
+      const mockModels = { data: [{ id: "gpt-4o" }] };
+      const originalFetch = globalThis.fetch;
+      let capturedUrl = "";
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (!urlStr.includes("localhost") && urlStr.includes("/models")) {
+          capturedUrl = urlStr;
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockModels) });
+        }
+        return originalFetch(url as RequestInfo, opts);
+      }) as unknown as typeof fetch;
+
+      try {
+        saveConfig(configWithProxy);
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, { provider: "openai" });
+        expect(res.status).toBe(200);
+        expect(capturedUrl).toContain("proxy.example.com");
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (savedEnvKey !== undefined) process.env.OPENAI_API_KEY = savedEnvKey;
+      }
+    });
+
+    it("explicit baseUrl overrides saved baseUrl", async () => {
+      const savedEnvKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      const configWithProxy = {
+        ...testConfig,
+        openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "https://saved-proxy.example.com" },
+      };
+      const mockModels = { data: [{ id: "gpt-4o" }] };
+      const originalFetch = globalThis.fetch;
+      let capturedUrl = "";
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+        if (!urlStr.includes("localhost") && urlStr.includes("/models")) {
+          capturedUrl = urlStr;
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockModels) });
+        }
+        return originalFetch(url as RequestInfo, opts);
+      }) as unknown as typeof fetch;
+
+      try {
+        saveConfig(configWithProxy);
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, {
+          provider: "openai",
+          baseUrl: "https://new-proxy.example.com",
+        });
+        expect(res.status).toBe(200);
+        expect(capturedUrl).toContain("new-proxy.example.com");
+        expect(capturedUrl).not.toContain("saved-proxy");
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (savedEnvKey !== undefined) process.env.OPENAI_API_KEY = savedEnvKey;
+      }
+    });
+
+    it("returns 400 when openai has no key in request or saved config", async () => {
+      const savedEnvKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      try {
+        // No config saved — unconfigured state
+        const app = createApp();
+        const res = await makeRequest(app, "POST", "/api/models", true, { provider: "openai" });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toContain("No API key configured");
+      } finally {
+        if (savedEnvKey !== undefined) process.env.OPENAI_API_KEY = savedEnvKey;
+      }
+    });
+
+    it("returns Claude models without any API key (fresh setup)", async () => {
+      // No config saved — unconfigured state
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "claude" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.models).toBeInstanceOf(Array);
+      expect(body.models.some((m: { id: string }) => m.id.includes("claude"))).toBe(true);
+    });
   });
 
   describe("WhatsApp endpoints", () => {
