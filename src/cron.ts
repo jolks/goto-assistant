@@ -20,7 +20,7 @@ export function isCronRunning(): boolean {
  * Call an mcp-cron tool by name with the given arguments.
  * Returns the parsed JSON result, or raw string if not valid JSON.
  */
-export async function callCronTool(toolName: string, args: Record<string, unknown> = {}): Promise<unknown> {
+export async function callCronTool(toolName: string, args: Record<string, unknown> = {}, timeoutMs?: number): Promise<unknown> {
   if (!cronProc) throw new Error("mcp-cron is not running");
   const id = nextId++;
   send(cronProc, {
@@ -29,7 +29,7 @@ export async function callCronTool(toolName: string, args: Record<string, unknow
     method: "tools/call",
     params: { name: toolName, arguments: args },
   });
-  const response = await waitForResponse(cronProc, id);
+  const response = await waitForResponse(cronProc, id, timeoutMs);
   const result = response.result as { content?: Array<{ type: string; text: string }> } | undefined;
   const text = result?.content?.[0]?.text;
   if (!text) return result;

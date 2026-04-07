@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "node:http";
 import path from "node:path";
 import multer from "multer";
-import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerConfig, getAgentMcpServers, MCP_CONFIG_PATH, type Config, type McpServerConfig } from "./config.js";
+import { isConfigured, loadConfig, saveConfig, getMaskedConfig, loadMcpServers, saveMcpServers, getMaskedMcpServers, unmaskMcpServers, syncMessagingMcpServer, syncEpisodicMcpServer, syncBrokerConfig, getAgentMcpServers, MCP_CONFIG_PATH, RUN_TASK_TIMEOUT_MS, type Config, type McpServerConfig } from "./config.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "./whatsapp.js";
 import { listChannels, sendMessage, UnknownChannelError, ChannelUnavailableError } from "./messaging.js";
 import { restartCronServer, callCronTool, isCronRunning } from "./cron.js";
@@ -258,7 +258,15 @@ export function createApp(): Express {
 
   cronProxy("put", "/api/tasks/:id", "update_task", (req) => ({ id: req.params.id, ...req.body }));
   cronProxy("delete", "/api/tasks/:id", "remove_task");
-  cronProxy("post", "/api/tasks/:id/run", "run_task");
+  // run_task blocks until the task completes (up to 120s in mcp-cron)
+  app.post("/api/tasks/:id/run", async (req, res) => {
+    try {
+      const result = await callCronTool("run_task", { id: req.params.id }, RUN_TASK_TIMEOUT_MS);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
   cronProxy("post", "/api/tasks/:id/enable", "enable_task");
   cronProxy("post", "/api/tasks/:id/disable", "disable_task");
   cronProxy("get", "/api/tasks/:id/results", "get_task_result", (req) => ({
