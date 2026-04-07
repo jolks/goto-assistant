@@ -28,6 +28,8 @@ export const SEMANTIC_MEMORY_SERVER_NAME = "memory";
 export const MAX_AGENT_TURNS = 30;
 export const MAX_HISTORY_MESSAGES = 100;
 export const RECENT_IMAGE_WINDOW = 10;
+/** Must exceed mcp-cron's Scheduler.DefaultTimeout (default 120s). */
+export const RUN_TASK_TIMEOUT_MS = 130_000;
 export const MCP_PROTOCOL_VERSION = "2024-11-05";
 
 export function isConfigured(): boolean {

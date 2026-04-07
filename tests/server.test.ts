@@ -26,7 +26,7 @@ import { createApp } from "../src/server.js";
 import { stopCronServer, restartCronServer, isCronRunning, callCronTool } from "../src/cron.js";
 import { startWhatsApp, stopWhatsApp, getWhatsAppStatus, getWhatsAppQrDataUri } from "../src/whatsapp.js";
 import { registerChannel, unregisterChannel, listChannels, ChannelUnavailableError } from "../src/messaging.js";
-import { saveConfig, saveMcpServers, MCP_CONFIG_PATH } from "../src/config.js";
+import { saveConfig, saveMcpServers, MCP_CONFIG_PATH, RUN_TASK_TIMEOUT_MS } from "../src/config.js";
 import { CURRENT_CONFIG_VERSION } from "../src/migrations.js";
 import { closeDb, createConversation, getConversation, saveMessage, getMessages } from "../src/sessions.js";
 import { UPLOADS_DIR } from "../src/uploads.js";
@@ -466,7 +466,7 @@ describe("server", () => {
       const app = createApp();
       const res = await makeRequest(app, "POST", "/api/tasks/t1/run");
       expect(res.status).toBe(200);
-      expect(callCronTool).toHaveBeenCalledWith("run_task", { id: "t1" }, 130_000);
+      expect(callCronTool).toHaveBeenCalledWith("run_task", { id: "t1" }, RUN_TASK_TIMEOUT_MS);
     });
 
     it("POST /api/tasks/:id/enable calls enable_task", async () => {
