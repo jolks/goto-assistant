@@ -142,8 +142,21 @@ function showApiKeyStatus(hasSavedKey) {
   }
 }
 
-// Auto-load models from API. Omits apiKey/baseUrl when falsy to let backend use saved config.
+// Fetch models from API. Omits apiKey/baseUrl when falsy to let backend use saved config.
 // baseUrl is a tri-state: undefined = not provided (backend falls back), '' = direct API, 'url' = proxy.
+function fetchModels(provider, apiKey, baseUrl) {
+  var body = { provider: provider };
+  if (apiKey) body.apiKey = apiKey;
+  if (baseUrl !== undefined) body.baseUrl = baseUrl;
+  return fetch('/api/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); });
+}
+
+// Auto-load models into the form's model select, with spinner and race-condition guard.
 var _autoLoadSeq = 0;
 function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
   var select = document.getElementById('model');
@@ -151,17 +164,8 @@ function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
   select.innerHTML = '<option value="">Loading...</option>';
   if (spinner) spinner.style.display = '';
 
-  var body = { provider: provider };
-  if (apiKey) body.apiKey = apiKey;
-  if (baseUrl !== undefined) body.baseUrl = baseUrl;
-
   var seq = ++_autoLoadSeq;
-  return fetch('/api/models', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+  return fetchModels(provider, apiKey, baseUrl)
   .then(function (result) {
     if (seq !== _autoLoadSeq) return;
     if (spinner) spinner.style.display = 'none';
@@ -186,5 +190,5 @@ function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { defaultServers: defaultServers, getProvider: getProvider, renderServers: renderServers, readServers: readServers, syncCronConfig: syncCronConfig, handleProviderSwitch: handleProviderSwitch, toggleBaseUrl: toggleBaseUrl, showApiKeyStatus: showApiKeyStatus, autoLoadModels: autoLoadModels };
+  module.exports = { defaultServers: defaultServers, getProvider: getProvider, renderServers: renderServers, readServers: readServers, syncCronConfig: syncCronConfig, handleProviderSwitch: handleProviderSwitch, toggleBaseUrl: toggleBaseUrl, showApiKeyStatus: showApiKeyStatus, fetchModels: fetchModels, autoLoadModels: autoLoadModels };
 }

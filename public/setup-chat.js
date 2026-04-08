@@ -106,17 +106,9 @@ function doLoadModels() {
 }
 
 async function loadModelsForChat(provider, apiKey, baseUrl) {
-  var body = { provider: provider };
-  if (apiKey) body.apiKey = apiKey;
-  if (baseUrl !== undefined) body.baseUrl = baseUrl;
-  var res = await fetch('/api/models', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  var data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to load models');
-  return data.models;
+  var result = await fetchModels(provider, apiKey, baseUrl);
+  if (!result.ok) throw new Error(result.data.error || 'Failed to load models');
+  return result.data.models;
 }
 
 async function saveSetupConfig(provider, apiKey, model, baseUrl, mcpServers) {

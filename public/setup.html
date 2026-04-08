@@ -135,8 +135,6 @@
       radio.addEventListener('change', () => {
         toggleBaseUrl(getProvider());
         handleProviderSwitch(isEditing, window._savedConfig);
-        doSyncCronConfig();
-        // Auto-load models for the new provider
         const provider = getProvider();
         const apiKey = document.getElementById('apiKey').value.trim();
         const baseUrl = document.getElementById('baseUrl').value.trim();
@@ -337,11 +335,9 @@
           if (c[c.provider]?.baseUrl) {
             document.getElementById('baseUrl').value = c[c.provider].baseUrl;
           }
-          // Show "Key saved" indicator
           if (c[c.provider]?.apiKey) {
             showApiKeyStatus(true);
           }
-          // Auto-load full model list (backend uses saved API key)
           autoLoadModels(c.provider, undefined, undefined, c[c.provider]?.model);
           // WhatsApp state
           if (c.whatsapp?.enabled) {
