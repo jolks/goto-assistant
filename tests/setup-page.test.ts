@@ -689,6 +689,38 @@ describe("setup page", () => {
       await autoLoadModels("openai", "sk-test", undefined, undefined);
       expect(changeSpy).toHaveBeenCalledTimes(1);
     });
+
+    it("ignores stale response when a newer request is made", async () => {
+      let resolveFirst!: (v: unknown) => void;
+      let callCount = 0;
+      globalThis.fetch = vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return new Promise((r) => { resolveFirst = r; });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ models: [{ id: "gpt-4o", name: "GPT-4o" }] }),
+        });
+      }) as unknown as typeof fetch;
+
+      // Fire first request (will be stale)
+      const first = autoLoadModels("claude", "sk-test", undefined, undefined);
+      // Fire second request immediately (supersedes first)
+      const second = autoLoadModels("openai", "sk-test", undefined, undefined);
+      await second;
+
+      // Now resolve the stale first response — it should be ignored
+      resolveFirst({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" }] }),
+      });
+      await first;
+
+      // Select should show the second (newer) result, not the stale first
+      const select = document.getElementById("model") as HTMLSelectElement;
+      expect(select.options[0].value).toBe("gpt-4o");
+    });
   });
 
   // -- MCP Servers details/summary --

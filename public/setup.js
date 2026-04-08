@@ -144,6 +144,7 @@ function showApiKeyStatus(hasSavedKey) {
 
 // Auto-load models from API. Omits apiKey/baseUrl when falsy to let backend use saved config.
 // baseUrl is a tri-state: undefined = not provided (backend falls back), '' = direct API, 'url' = proxy.
+var _autoLoadSeq = 0;
 function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
   var select = document.getElementById('model');
   var spinner = document.getElementById('modelSpinner');
@@ -154,6 +155,7 @@ function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
   if (apiKey) body.apiKey = apiKey;
   if (baseUrl !== undefined) body.baseUrl = baseUrl;
 
+  var seq = ++_autoLoadSeq;
   return fetch('/api/models', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -161,6 +163,7 @@ function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
   })
   .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
   .then(function (result) {
+    if (seq !== _autoLoadSeq) return;
     if (spinner) spinner.style.display = 'none';
     if (!result.ok) {
       select.innerHTML = '<option value="">\u2014 Enter API key to load models \u2014</option>';
@@ -176,6 +179,7 @@ function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
     select.dispatchEvent(new Event('change'));
   })
   .catch(function () {
+    if (seq !== _autoLoadSeq) return;
     if (spinner) spinner.style.display = 'none';
     select.innerHTML = '<option value="">\u2014 Failed to load models \u2014</option>';
   });
