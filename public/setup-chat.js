@@ -108,7 +108,7 @@ function doLoadModels() {
 async function loadModelsForChat(provider, apiKey, baseUrl) {
   var body = { provider: provider };
   if (apiKey) body.apiKey = apiKey;
-  if (baseUrl) body.baseUrl = baseUrl;
+  if (baseUrl !== undefined) body.baseUrl = baseUrl;
   var res = await fetch('/api/models', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
