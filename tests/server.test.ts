@@ -794,6 +794,84 @@ describe("server", () => {
       const body = await res.json();
       expect(body.error).toContain("Invalid provider");
     });
+
+    // Helper: mock external model fetches and clear OPENAI_API_KEY env var for fallback tests
+    function withModelsFetchMock(fn: (captured: { url: string; auth: string }) => Promise<void>): () => Promise<void> {
+      return async () => {
+        const savedEnvKey = process.env.OPENAI_API_KEY;
+        delete process.env.OPENAI_API_KEY;
+        const originalFetch = globalThis.fetch;
+        const captured = { url: "", auth: "" };
+        globalThis.fetch = vi.fn().mockImplementation((url: string | URL, opts?: RequestInit) => {
+          const urlStr = typeof url === "string" ? url : url.toString();
+          if (!urlStr.includes("localhost") && urlStr.includes("/models")) {
+            captured.url = urlStr;
+            captured.auth = (opts?.headers as Record<string, string>)?.["Authorization"] ?? "";
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ data: [{ id: "gpt-4o" }] }) });
+          }
+          return originalFetch(url as RequestInfo, opts);
+        }) as unknown as typeof fetch;
+        try {
+          await fn(captured);
+        } finally {
+          globalThis.fetch = originalFetch;
+          if (savedEnvKey !== undefined) process.env.OPENAI_API_KEY = savedEnvKey;
+        }
+      };
+    }
+
+    it("falls back to saved API key when apiKey not in request", withModelsFetchMock(async (captured) => {
+      saveConfig(testConfig); // has openai.apiKey: "sk-openai-test789"
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "openai" });
+      expect(res.status).toBe(200);
+      expect(captured.auth).toBe("Bearer sk-openai-test789");
+    }));
+
+    it("falls back to saved baseUrl when baseUrl not in request", withModelsFetchMock(async (captured) => {
+      saveConfig({
+        ...testConfig,
+        openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "https://proxy.example.com" },
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "openai" });
+      expect(res.status).toBe(200);
+      expect(captured.url).toContain("proxy.example.com");
+    }));
+
+    it("explicit baseUrl overrides saved baseUrl", withModelsFetchMock(async (captured) => {
+      saveConfig({
+        ...testConfig,
+        openai: { apiKey: "sk-openai-test789", model: "gpt-4o", baseUrl: "https://saved-proxy.example.com" },
+      });
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, {
+        provider: "openai",
+        baseUrl: "https://new-proxy.example.com",
+      });
+      expect(res.status).toBe(200);
+      expect(captured.url).toContain("new-proxy.example.com");
+      expect(captured.url).not.toContain("saved-proxy");
+    }));
+
+    it("returns 400 when openai has no key in request or saved config", withModelsFetchMock(async () => {
+      // No config saved — unconfigured state
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "openai" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("No API key configured");
+    }));
+
+    it("returns Claude models without any API key (fresh setup)", async () => {
+      // No config saved — unconfigured state
+      const app = createApp();
+      const res = await makeRequest(app, "POST", "/api/models", true, { provider: "claude" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.models).toBeInstanceOf(Array);
+      expect(body.models.some((m: { id: string }) => m.id.includes("claude"))).toBe(true);
+    });
   });
 
   describe("WhatsApp endpoints", () => {

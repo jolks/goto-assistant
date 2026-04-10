@@ -66,7 +66,18 @@ export function createApp(): Express {
 
   // List models for setup page
   app.post("/api/models", async (req, res) => {
-    const { provider, apiKey, baseUrl } = req.body;
+    const { provider } = req.body;
+    let { apiKey, baseUrl } = req.body;
+
+    // Fall back to saved config when apiKey/baseUrl not provided
+    if (isConfigured()) {
+      const saved = loadConfig();
+      const pc = saved[provider as keyof Pick<Config, "claude" | "openai">];
+      if (pc) {
+        if (!apiKey && pc.apiKey) apiKey = pc.apiKey;
+        if (baseUrl === undefined && pc.baseUrl) baseUrl = pc.baseUrl;
+      }
+    }
 
     if (provider === "claude") {
       // Anthropic doesn't have a list models endpoint; return known models
@@ -81,6 +92,10 @@ export function createApp(): Express {
     }
 
     if (provider === "openai") {
+      if (!apiKey) {
+        res.status(400).json({ error: "No API key configured for this provider" });
+        return;
+      }
       try {
         const base = (baseUrl || "https://api.openai.com").replace(/\/+$/, "");
         let url = `${base}/v1/models`;

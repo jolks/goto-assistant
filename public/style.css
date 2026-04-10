@@ -1030,6 +1030,24 @@ body {
 .setup-layout { display: flex; height: 100vh; height: 100dvh; }
 .setup-form { flex: 1; overflow-y: auto; }
 .setup-form .container { max-width: 640px; }
+#mcpDetails { margin-top: 16px; }
+
+/* ---- API key status indicator ---- */
+.api-key-status { display: block; font-size: 12px; margin-top: -8px; margin-bottom: 8px; min-height: 16px; }
+.api-key-status.saved { color: #16a34a; }
+.api-key-status.saved::before { content: '\2713  '; }
+
+/* ---- Model loading spinner ---- */
+.model-select-row { display: flex; align-items: center; gap: 8px; }
+.model-select-row select { flex: 1; margin-bottom: 0; }
+.model-spinner {
+  width: 18px; height: 18px; flex-shrink: 0;
+  border: 2px solid var(--surface-border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- Setup Chat Panel ---- */
 .setup-chat {
@@ -1204,6 +1222,7 @@ body {
 
 /* ---- Dark mode status overrides ---- */
 @media (prefers-color-scheme: dark) {
+  .api-key-status.saved { color: #86efac; }
   .status-msg.error {
     background: rgba(220, 38, 38, 0.08);
     color: #fca5a5;

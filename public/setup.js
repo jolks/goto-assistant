@@ -129,6 +129,66 @@ function handleProviderSwitch(isEditing, savedConfig) {
   }
 }
 
+// Show/hide "Key saved" indicator below API key input
+function showApiKeyStatus(hasSavedKey) {
+  var el = document.getElementById('apiKeyStatus');
+  if (!el) return;
+  if (hasSavedKey) {
+    el.textContent = 'Key saved';
+    el.className = 'api-key-status saved';
+  } else {
+    el.textContent = '';
+    el.className = 'api-key-status';
+  }
+}
+
+// Fetch models from API. Omits apiKey/baseUrl when falsy to let backend use saved config.
+// baseUrl is a tri-state: undefined = not provided (backend falls back), '' = direct API, 'url' = proxy.
+function fetchModels(provider, apiKey, baseUrl) {
+  var body = { provider: provider };
+  if (apiKey) body.apiKey = apiKey;
+  if (baseUrl !== undefined) body.baseUrl = baseUrl;
+  return fetch('/api/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); });
+}
+
+// Auto-load models into the form's model select, with spinner and race-condition guard.
+var _autoLoadSeq = 0;
+function autoLoadModels(provider, apiKey, baseUrl, savedModel) {
+  var select = document.getElementById('model');
+  var spinner = document.getElementById('modelSpinner');
+  select.innerHTML = '<option value="">Loading...</option>';
+  if (spinner) spinner.style.display = '';
+
+  var seq = ++_autoLoadSeq;
+  return fetchModels(provider, apiKey, baseUrl)
+  .then(function (result) {
+    if (seq !== _autoLoadSeq) return;
+    if (spinner) spinner.style.display = 'none';
+    if (!result.ok) {
+      select.innerHTML = '<option value="">\u2014 Enter API key to load models \u2014</option>';
+      return;
+    }
+    select.innerHTML = result.data.models.map(function (m) {
+      return '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.name) + '</option>';
+    }).join('');
+    if (savedModel) {
+      var opt = select.querySelector('option[value="' + savedModel.replace(/"/g, '\\"') + '"]');
+      if (opt) select.value = savedModel;
+    }
+    select.dispatchEvent(new Event('change'));
+  })
+  .catch(function () {
+    if (seq !== _autoLoadSeq) return;
+    if (spinner) spinner.style.display = 'none';
+    select.innerHTML = '<option value="">\u2014 Failed to load models \u2014</option>';
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { defaultServers: defaultServers, getProvider: getProvider, renderServers: renderServers, readServers: readServers, syncCronConfig: syncCronConfig, handleProviderSwitch: handleProviderSwitch, toggleBaseUrl: toggleBaseUrl };
+  module.exports = { defaultServers: defaultServers, getProvider: getProvider, renderServers: renderServers, readServers: readServers, syncCronConfig: syncCronConfig, handleProviderSwitch: handleProviderSwitch, toggleBaseUrl: toggleBaseUrl, showApiKeyStatus: showApiKeyStatus, fetchModels: fetchModels, autoLoadModels: autoLoadModels };
 }

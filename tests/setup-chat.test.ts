@@ -24,6 +24,7 @@ import {
   syncCronConfig,
   getProvider,
   handleProviderSwitch,
+  fetchModels,
 } from "../public/setup.js";
 
 // In the browser, <script> var declarations become window globals.
@@ -35,6 +36,7 @@ import {
 (globalThis as Record<string, unknown>).syncCronConfig = syncCronConfig;
 (globalThis as Record<string, unknown>).getProvider = getProvider;
 (globalThis as Record<string, unknown>).handleProviderSwitch = handleProviderSwitch;
+(globalThis as Record<string, unknown>).fetchModels = fetchModels;
 
 import {
   setupChatState,
