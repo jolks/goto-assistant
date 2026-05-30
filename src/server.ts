@@ -136,13 +136,14 @@ export function createApp(): Express {
       return;
     }
     // Merge with existing config to preserve fields not sent (e.g. API key when editing)
-    const existing = isConfigured() ? loadConfig() : { provider: "", claude: { apiKey: "", model: "", baseUrl: "" }, openai: { apiKey: "", model: "", baseUrl: "" }, server: { port: 3000 }, whatsapp: { enabled: false } };
+    const existing = isConfigured() ? loadConfig() : { provider: "", claude: { apiKey: "", model: "", baseUrl: "" }, openai: { apiKey: "", model: "", baseUrl: "" }, server: { port: 3000 }, whatsapp: { enabled: false }, broker: { enabled: false } };
     const config: Config = {
       provider: incoming.provider,
       claude: { ...existing.claude, ...incoming.claude },
       openai: { ...existing.openai, ...incoming.openai },
       server: incoming.server,
       whatsapp: incoming.whatsapp ?? existing.whatsapp,
+      broker: incoming.broker ?? existing.broker,
       configVersion: CURRENT_CONFIG_VERSION,
     };
     saveConfig(config);

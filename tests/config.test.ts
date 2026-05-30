@@ -7,6 +7,9 @@ import { CONFIG_PATH, testConfig, cleanupConfigFiles } from "./helpers.js";
 const BROKER_DATA_DIR = path.join(DATA_DIR, "mcp-broker");
 const BROKER_SERVERS_PATH = path.join(BROKER_DATA_DIR, "servers.json");
 
+// Broker is opt-in (off by default); enabled tests save this config.
+const brokerOnConfig: Config = { ...testConfig, broker: { enabled: true } };
+
 function cleanupBrokerFiles() {
   if (fs.existsSync(BROKER_SERVERS_PATH)) fs.unlinkSync(BROKER_SERVERS_PATH);
   if (fs.existsSync(BROKER_DATA_DIR)) fs.rmdirSync(BROKER_DATA_DIR);
@@ -452,9 +455,9 @@ describe("config", () => {
     });
   });
 
-  describe("syncBrokerConfig", () => {
+  describe("syncBrokerConfig (broker enabled)", () => {
     it("adds broker entry to mcp.json", () => {
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
       const servers = loadMcpServers();
       expect(servers[BROKER_SERVER_NAME]).toBeDefined();
@@ -465,7 +468,7 @@ describe("config", () => {
 
     it("preserves other MCP servers", () => {
       saveMcpServers({ memory: { command: "npx", args: ["-y", "server-memory"] } });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
       const servers = loadMcpServers();
       expect(servers.memory).toBeDefined();
@@ -484,7 +487,7 @@ describe("config", () => {
         filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
         github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
       });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
       const content = JSON.parse(fs.readFileSync(BROKER_SERVERS_PATH, "utf-8"));
       expect(content.mcpServers.filesystem).toBeDefined();
@@ -496,7 +499,7 @@ describe("config", () => {
 
     it("sets servers.json permissions to 0600 (may contain API keys)", () => {
       saveMcpServers({ filesystem: { command: "npx", args: ["-y", "server-filesystem", "."], env: { API_KEY: "secret" } } });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
       const stats = fs.statSync(BROKER_SERVERS_PATH);
       expect(stats.mode & 0o777).toBe(0o600);
@@ -504,7 +507,7 @@ describe("config", () => {
 
     it("cleans up servers.json when all user servers removed", () => {
       saveMcpServers({ filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] } });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
       expect(fs.existsSync(BROKER_SERVERS_PATH)).toBe(true);
 
@@ -518,7 +521,7 @@ describe("config", () => {
         cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
         filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
       });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
       const content = JSON.parse(fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8"));
       expect(content.mcpServers.cron).toBeDefined();
@@ -530,7 +533,7 @@ describe("config", () => {
       saveMcpServers({
         cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
       });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
       const servers = loadMcpServers();
       const idx = servers.cron.args.indexOf("--mcp-config-path");
@@ -541,7 +544,7 @@ describe("config", () => {
       saveMcpServers({
         cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
       });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig();
 
       // Revert cron args (simulating setup page save)
@@ -560,12 +563,50 @@ describe("config", () => {
       saveMcpServers({
         cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", AGENT_MCP_CONFIG_PATH] },
       });
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
       syncBrokerConfig(); // first call writes
       const spy = vi.spyOn(fs, "writeFileSync");
       syncBrokerConfig(); // second call should skip
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
+    });
+  });
+
+  describe("syncBrokerConfig (broker disabled — default)", () => {
+    it("removes the broker entry from mcp.json", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron"] },
+        [BROKER_SERVER_NAME]: { command: "npx", args: ["-y", "mcp-broker", "serve"] },
+      });
+      saveConfig(testConfig); // broker off by default
+      syncBrokerConfig();
+      const servers = loadMcpServers();
+      expect(servers[BROKER_SERVER_NAME]).toBeUndefined();
+      expect(servers.cron).toBeDefined();
+    });
+
+    it("removes the broker servers.json", () => {
+      fs.mkdirSync(BROKER_DATA_DIR, { recursive: true });
+      fs.writeFileSync(BROKER_SERVERS_PATH, JSON.stringify({ mcpServers: { filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] } } }));
+      saveMcpServers({ filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] } });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      expect(fs.existsSync(BROKER_SERVERS_PATH)).toBe(false);
+    });
+
+    it("writes all servers directly to mcp-agent.json (no broker indirection)", () => {
+      saveMcpServers({
+        cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },
+        memory: { command: "npx", args: ["-y", "server-memory"] },
+        filesystem: { command: "npx", args: ["-y", "server-filesystem", "."] },
+      });
+      saveConfig(testConfig);
+      syncBrokerConfig();
+      const content = JSON.parse(fs.readFileSync(AGENT_MCP_CONFIG_PATH, "utf-8"));
+      expect(content.mcpServers.cron).toBeDefined();
+      expect(content.mcpServers.memory).toBeDefined();
+      expect(content.mcpServers.filesystem).toBeDefined();
+      expect(content.mcpServers[BROKER_SERVER_NAME]).toBeUndefined();
     });
   });
 
@@ -597,7 +638,7 @@ describe("config", () => {
 
   describe("broker integration — full sync flow", () => {
     it("syncs servers through add, update, and remove lifecycle", () => {
-      saveConfig(testConfig);
+      saveConfig(brokerOnConfig);
 
       saveMcpServers({
         cron: { command: "npx", args: ["-y", "mcp-cron", "--mcp-config-path", "./data/mcp.json"] },

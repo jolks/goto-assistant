@@ -40,9 +40,9 @@ flowchart TD
         episodic["episodic-memory<br/>(FTS5 search)"]
     end
 
-    subgraph "MCP Servers (via broker)"
-        broker["mcp-broker<br/>(FTS5 gateway)"]
+    subgraph "User-added MCP servers (direct by default)"
         other_mcp["user-added servers..."]
+        broker["mcp-broker<br/>(FTS5 gateway — opt-in)"]
     end
 
     db[("SQLite DB<br/>data/sessions.db")]
@@ -61,10 +61,10 @@ flowchart TD
     messaging_api --> ch_wa
     ch_wa -- "sendWhatsAppMessage" --> wa
 
-    claude --> cron & memory & time_srv & mcp_msg & episodic & broker
-    openai --> cron & memory & time_srv & mcp_msg & episodic & broker
-    cron --> memory & time_srv & mcp_msg & episodic & broker
-    broker -- "search_tools / call_tools" --> other_mcp
+    claude --> cron & memory & time_srv & mcp_msg & episodic & other_mcp
+    openai --> cron & memory & time_srv & mcp_msg & episodic & other_mcp
+    cron --> memory & time_srv & mcp_msg & episodic & other_mcp
+    broker -. "opt-in: search_tools / call_tools" .-> other_mcp
 
     mcp_msg -- "proxies to" --> messaging_api
 
