@@ -11,12 +11,17 @@ export interface WhatsAppConfig {
   enabled: boolean;
 }
 
+export interface BrokerConfig {
+  enabled: boolean;
+}
+
 export interface Config {
   provider: "claude" | "openai";
   claude: { apiKey: string; model: string; baseUrl: string };
   openai: { apiKey: string; model: string; baseUrl: string };
   server: { port: number };
   whatsapp?: WhatsAppConfig;
+  broker?: BrokerConfig;
   configVersion?: number;
 }
 
@@ -43,6 +48,11 @@ export function loadConfig(): Config {
   // Default whatsapp config if missing
   if (!config.whatsapp) {
     config.whatsapp = { enabled: false };
+  }
+
+  // Default broker config if missing (opt-in; off by default)
+  if (!config.broker) {
+    config.broker = { enabled: false };
   }
 
   // Environment variables override config file values
@@ -247,42 +257,56 @@ export function getAgentMcpServers(servers?: Record<string, McpServerConfig>): R
 export const AGENT_MCP_CONFIG_PATH = path.join(DATA_DIR, "mcp-agent.json");
 
 /**
- * Sync all broker-related config: add broker to mcp.json, write user servers
- * to broker's servers.json, write agent-facing config to mcp-agent.json,
- * and update cron's --mcp-config-path to point to mcp-agent.json.
+ * Sync all broker-related config based on config.broker.enabled (opt-in, off by
+ * default). When enabled: add broker to mcp.json and write user servers to
+ * broker's servers.json. When disabled: remove the broker entry and servers.json
+ * so user servers connect directly. In both cases, write agent-facing config to
+ * mcp-agent.json and update cron's --mcp-config-path to point to it.
  */
 export function syncBrokerConfig(servers?: Record<string, McpServerConfig>): void {
   if (!isConfigured()) return;
   if (!servers) servers = loadMcpServers();
 
-  // 1. Ensure broker entry exists in mcp.json
-  const desiredBroker: McpServerConfig = {
-    command: "npx",
-    args: ["-y", "mcp-broker", "serve"],
-    env: { MCP_BROKER_HOME: BROKER_DATA_DIR },
-  };
-  if (JSON.stringify(servers[BROKER_SERVER_NAME]) !== JSON.stringify(desiredBroker)) {
-    servers[BROKER_SERVER_NAME] = desiredBroker;
-    saveMcpServers(servers);
-  }
+  const brokerEnabled = loadConfig().broker?.enabled === true;
 
-  // 2. Write user-added servers to broker's servers.json
-  const userServers: Record<string, McpServerConfig> = {};
-  for (const [name, config] of Object.entries(servers)) {
-    if (!BUILTIN_SERVER_NAMES.has(name)) {
-      userServers[name] = config;
+  if (brokerEnabled) {
+    // 1. Ensure broker entry exists in mcp.json
+    const desiredBroker: McpServerConfig = {
+      command: "npx",
+      args: ["-y", "mcp-broker", "serve"],
+      env: { MCP_BROKER_HOME: BROKER_DATA_DIR },
+    };
+    if (JSON.stringify(servers[BROKER_SERVER_NAME]) !== JSON.stringify(desiredBroker)) {
+      servers[BROKER_SERVER_NAME] = desiredBroker;
+      saveMcpServers(servers);
     }
-  }
-  if (Object.keys(userServers).length === 0) {
-    try { fs.unlinkSync(BROKER_SERVERS_PATH); } catch { /* already absent */ }
+
+    // 2. Write user-added servers to broker's servers.json
+    const userServers: Record<string, McpServerConfig> = {};
+    for (const [name, config] of Object.entries(servers)) {
+      if (!BUILTIN_SERVER_NAMES.has(name)) {
+        userServers[name] = config;
+      }
+    }
+    if (Object.keys(userServers).length === 0) {
+      try { fs.unlinkSync(BROKER_SERVERS_PATH); } catch { /* already absent */ }
+    } else {
+      const desiredJson = JSON.stringify({ mcpServers: userServers }, null, 2);
+      let current: string | undefined;
+      try { current = fs.readFileSync(BROKER_SERVERS_PATH, "utf-8"); } catch { /* missing */ }
+      if (current !== desiredJson) {
+        fs.mkdirSync(BROKER_DATA_DIR, { recursive: true });
+        fs.writeFileSync(BROKER_SERVERS_PATH, desiredJson, { mode: 0o600 });
+      }
+    }
   } else {
-    const desiredJson = JSON.stringify({ mcpServers: userServers }, null, 2);
-    let current: string | undefined;
-    try { current = fs.readFileSync(BROKER_SERVERS_PATH, "utf-8"); } catch { /* missing */ }
-    if (current !== desiredJson) {
-      fs.mkdirSync(BROKER_DATA_DIR, { recursive: true });
-      fs.writeFileSync(BROKER_SERVERS_PATH, desiredJson, { mode: 0o600 });
+    // Broker disabled: remove its entry so all servers connect directly, and
+    // drop the broker's servers.json (regenerated if re-enabled later).
+    if (BROKER_SERVER_NAME in servers) {
+      delete servers[BROKER_SERVER_NAME];
+      saveMcpServers(servers);
     }
+    try { fs.unlinkSync(BROKER_SERVERS_PATH); } catch { /* already absent */ }
   }
 
   // 3. Update cron's --mcp-config-path to point to mcp-agent.json
